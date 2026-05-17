@@ -8,6 +8,8 @@ import {
   JSON_HEADERS,
   SOLANA_PRIVATE_KEY,
   SOLANA_RPC_URL,
+  JITO_TIP_LAMPORTS,
+  JUPITER_PRIORITY_FEE_LAMPORTS
 } from './config.js';
 
 let liveWallet = null;
@@ -69,6 +71,8 @@ async function jupiterOrder({ inputMint, outputMint, amount }) {
   url.searchParams.set('outputMint', outputMint);
   url.searchParams.set('amount', String(amount));
   url.searchParams.set('taker', liveWallet.publicKey.toBase58());
+  url.searchParams.set('prioritizationFeeLamports', String(JUPITER_PRIORITY_FEE_LAMPORTS));
+  url.searchParams.set('jitoTipLamports', String(JITO_TIP_LAMPORTS));
   const res = await axios.get(url.toString(), {
     timeout: 20_000,
     headers: { ...JSON_HEADERS, 'x-api-key': JUPITER_API_KEY },

@@ -33,17 +33,40 @@ export function compactCandidateForLlm(row) {
   const c = row.candidate;
   const athWindow = c.chart?.windows?.find(window => window.label === 'ath_context_24h_5m' && window.available)
     || c.chart?.windows?.find(window => window.label === 'recent_24h_5m' && window.available);
+
+  // Kalkulasi Quant: Fee Density (1.0x = 1 SOL fee per $10k MCap)
+  const mcap = Number(c.metrics?.marketCapUsd || c.metrics?.graduatedMarketCapUsd || 0);
+  
+  // Ekstraksi fee tingkat lanjut: memindai seluruh letak data yang mungkin
+  const feesSol = Number(
+    c.metrics?.gmgnTotalFeesSol || 
+    c.feeClaim?.distributedSol || 
+    c.feeClaim?.totalFeeSol || 
+    c.metrics?.totalFeeSol || 
+    0
+  );
+
+  const feeDensity = mcap > 0 ? (feesSol / (mcap / 10000)) : 0;
+
   return {
     candidate_id: row.id,
     mint: c.token?.mint,
     route: c.signals?.route,
     signals: c.signals,
     token: c.token,
-    metrics: c.metrics,
+    metrics: {
+      ...c.metrics,
+      totalFeesSol: feesSol, 
+      feeDensityMultiplier: Number(feeDensity.toFixed(2))
+    },
     feeClaim: c.feeClaim,
     trending: c.trending,
     graduation: c.graduation,
-    holders: c.holders,
+    holders: {
+      count: c.holders?.count,
+      top20Percent: c.holders?.top20Percent,
+      maxHolderPercent: c.holders?.maxHolderPercent
+    },
     chart: {
       purpose: 'ATH/range context only. Do not treat large 24h change as bullish/bearish momentum by itself.',
       currentNative: c.chart?.currentNative,
@@ -80,30 +103,33 @@ export async function decideCandidateBatch(rows, triggerCandidateId) {
     };
   }
 
+  // TRENCH MASTER SYSTEM PROMPT (FEE DENSITY IS KING)
   const system = [
-    'You are Charon, a Solana meme coin trench analyst.',
+    'You are Kaffra, an elite Solana meme coin trench analyst trained by top quantitative scientists.',
     'Return strict JSON only.',
-    'You will receive up to 10 recently matched candidates.',
-    'Pick at most one candidate to buy through the configured execution mode.',
-    'Use verdict BUY only for the single best unusually strong asymmetric opportunity.',
-    'Use WATCH if candidates are interesting but none deserves a buy.',
-    'Use PASS if the set is weak or unsafe.',
-    'Chart data is ATH/range context. Do not penalize or reward a token only because 24h change is huge; new Pump tokens often do that.',
-    'Use distance from ATH/range high and top-blast risk to decide whether entry is late.',
-    'Confidence is your conviction from 0 to 100, not probability.',
+    'You receive up to 10 recently matched candidates. Pick MAXIMUM ONE solid candidate for a high-probability short-term momentum trade, or PASS.',
+    'RULES OF THE TRENCH:',
+    '1. SKEPTICAL SNIPER: You are extremely selective. You should PASS on 90% of candidates. Only BUY if the setup is flawless.',
+    '2. HOLDER DISTRIBUTION: Top 20 holders < 45% is ideal. Do not obsess over it if it is under 65%, BUT strictly PASS if a single non-developer wallet holds > 15%.',
+    '3. FEE DENSITY IS KING: Check "feeDensityMultiplier". > 1.5x is EXTREMELY BULLISH. < 0.5x is a RED FLAG (wash-trading).',
+    '4. CHART MOMENTUM (CRITICAL): Do not catch falling knives! If a token is down > 60% from its ATH and shows no signs of consolidation or new momentum, DO NOT BUY IT, even if the fee density is high. High fees on a bleeding chart means mass panic selling, not accumulation.',
+    '5. SMART BUY TRIGGER: IF feeDensityMultiplier > 1.5x AND Top 20 Holders < 65% AND the chart is NOT a falling knife (down >60% without recovery), THEN you may issue a BUY.',
+    '6. Use verdict BUY for the absolute best opportunity. Use WATCH if interesting but risky. Use PASS for cabal dumps or bleeding charts.',
+    '7. STRICT CONFIDENCE RULE: If your verdict is PASS, confidence MUST be 0. If BUY, assign high confidence (70-95) based on momentum and fee density.',
   ].join(' ');
+
   const user = {
-    task: 'Pick the best dry-run buy candidate from this recent batch, or choose none.',
+    task: 'Analyze the candidates on-chain metrics and chart context. Pick the absolute safest and most explosive gem, or choose none. Do not provide generic advice. Follow the trench rules strictly. Explain your reasoning with precise on-chain analysis. Do not set TP and SL too high or too much, set the TP and SL based on the data, and do not forget to calculate risk-reward ratio.',
     recent_lessons: activeLessonsForPrompt(),
     output_schema: {
       verdict: 'BUY|WATCH|PASS',
       selected_candidate_id: 'integer candidate_id when verdict is BUY, otherwise null',
       selected_mint: 'mint string when verdict is BUY, otherwise null',
       confidence: 'number 0-100',
-      reason: 'short string',
-      risks: ['short strings'],
-      suggested_tp_percent: 'positive number',
-      suggested_sl_percent: 'negative number',
+      reason: 'Strict trench analysis explaining WHY it is a gem (accumulation/distribution) or a trap',
+      risks: ['Top 3 exact risks based strictly on on-chain data and holder metrics'],
+      suggested_tp_percent: 'positive number (e.g., 10 to 30)',
+      suggested_sl_percent: 'negative number (e.g., -30 to -5)',
     },
     trigger_candidate_id: triggerCandidateId,
     candidates: rows.map(compactCandidateForLlm),
@@ -112,7 +138,7 @@ export async function decideCandidateBatch(rows, triggerCandidateId) {
   try {
     const res = await axios.post(`${LLM_BASE_URL.replace(/\/$/, '')}/chat/completions`, {
       model: LLM_MODEL,
-      temperature: 0.2,
+      temperature: 0.11, 
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: JSON.stringify(user) },

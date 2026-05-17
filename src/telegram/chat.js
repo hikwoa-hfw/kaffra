@@ -151,7 +151,7 @@ export async function handleChatMessage(userMessage, chatId) {
       `${LLM_BASE_URL.replace(/\/$/, '')}/chat/completions`,
       {
         model: LLM_MODEL,
-        temperature: 0.7,
+        temperature: 0.4,
         max_tokens: 1200,
         messages,
       },

@@ -39,49 +39,59 @@ export function fallbackLessons(summary) {
 export async function generateLessons(summary) {
   const fallback = fallbackLessons(summary);
   if (!ENABLE_LLM || !LLM_API_KEY) return { lessons: fallback, raw: { fallback: true } };
+  
+  // AI QUANT SCIENTIST & TRENCH MASTER PROMPT
+  const system = [
+    "You are Kaffra's chief Quant Scientist and an elite Solana meme coin trench master.",
+    "Your task is to conduct a rigorous, multi-dimensional retrospective analysis of recent dry-run trading evidence.",
+    "Do not provide shallow, generic, or superficial advice (e.g., 'avoid high market cap').",
+    "You must systematically diagnose the underlying market mechanics, structural failures, and operational successes of the trades.",
+    "Analyze the exact mathematical correlations between 'byRoute' win rates, fee density, entry Market Cap tiers, exit reasons, and the LLM average confidence scores.",
+    "Provide deeply granular, highly precise, and richly detailed operational lessons.",
+    "Each lesson must explain the deep chain of logic: WHAT happened, WHY it happened on-chain (e.g., sniper behavior, liquidity traps, developer dumping), and EXACTLY HOW to modify our screening thresholds to fix it.",
+    "Return strict JSON matching the requested schema."
+  ].join(' ');
+
+  const user = {
+    task: 'Perform an exhaustive post-mortem analysis of the provided trading window and generate deep, multi-sentence master screening lessons.',
+    output_schema: {
+      lessons: [
+        { 
+          lesson: 'A comprehensive, multi-sentence operational rule combined with its deep causal analysis and concrete data evidence. (Example format: "Restrict route \'smart_money\' strictly to entries below $750k MCap. Data shows our win rate drops to 0% across 6 trades when entering higher, indicating that late-stage buyers on this route are serving exclusively as exit liquidity for snipers. For high MCap tiers, pivot screening to prioritize tokens with developer token burn confirmation and a maximum top-20 holder concentration of 25% to mitigate cabal dumps.").'
+        }
+      ],
+    },
+    summary,
+  };
+
   try {
     const res = await axios.post(`${LLM_BASE_URL.replace(/\/$/, '')}/chat/completions`, {
       model: LLM_MODEL,
       temperature: 0.1,
       messages: [
-        {
-          role: 'system',
-          content: [
-            'You are Charon learning from dry-run trading evidence.',
-            'Return strict JSON only.',
-            'Do not invent trades or outcomes.',
-            'Create compact operational lessons that can improve the next screening prompt.',
-          ].join(' '),
-        },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            task: 'Analyze this dry-run window and produce up to 6 lessons for future candidate screening.',
-            output_schema: {
-              lessons: [{ lesson: 'short actionable rule', evidence: 'specific supporting data' }],
-            },
-            summary,
-          }),
-        },
+        { role: 'system', content: system },
+        { role: 'user', content: JSON.stringify(user) },
       ],
     }, {
       timeout: LLM_TIMEOUT_MS,
       headers: { authorization: `Bearer ${LLM_API_KEY}`, 'content-type': 'application/json' },
     });
+
     const parsed = strictJsonFromText(res.data?.choices?.[0]?.message?.content || '');
+    
     const lessons = Array.isArray(parsed.lessons)
       ? parsed.lessons.map(item => ({
-          lesson: String(item.lesson || '').slice(0, 500),
-          evidence: item.evidence ?? {},
-        })).filter(item => item.lesson)
+          lesson: String(item.lesson || '').slice(0, 1000), 
+          evidence: {}, 
+        })).filter(item => item.lesson.trim().length > 0)
       : [];
+
     return { lessons: lessons.length ? lessons.slice(0, 6) : fallback, raw: parsed };
   } catch (err) {
-    console.log(`[learn] LLM failed: ${err.message}`);
+    console.log(`[learn] Deep-dive LLM analysis failed: ${err.message}`);
     return { lessons: fallback, raw: { error: err.message, fallback: true } };
   }
 }
-
 export async function generateSmartDegenLessons(summary) {
   const { bucketStats, correlation, totalClosed } = summary;
   const fallback = [];

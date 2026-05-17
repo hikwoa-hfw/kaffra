@@ -1,6 +1,6 @@
 import { bot } from './bot.js';
 import { TELEGRAM_CHAT_ID } from '../config.js';
-import { now, json } from '../utils.js';
+import { now, json, parseWindowMs } from '../utils.js';
 import { escapeHtml, fmtPct } from '../format.js';
 import { db } from '../db/connection.js';
 import { numSetting, boolSetting, setSetting, activeStrategy, setActiveStrategy, strategyById, updateStrategyConfig } from '../db/settings.js';
@@ -108,7 +108,12 @@ export async function handleMessage(msg) {
     updateStrategyConfig(id, newConfig);
     return bot.sendMessage(chatId, `Updated ${id}.${key} = ${value}\n\n${strategyMenuText()}`, { parse_mode: 'HTML' });
   }
-  if (text.startsWith('/pnl')) return sendPnl(chatId);
+  if (text.startsWith('/pnl')) {
+    const parts = text.split(/\s+/);
+    const modeArg = ['dry_run', 'live', 'all'].includes(parts[1]) ? parts[1] : 'all';
+    const windowArg = parts[2] || (parts[1] && !['dry_run', 'live', 'all'].includes(parts[1]) ? parts[1] : '12h');
+    return sendPnl(chatId, null, modeArg, windowArg);
+  }
   if (text.startsWith('/learnsmartdegen')) {
     const windowArg = text.split(/\s+/)[1] || '7d';
     return runSmartDegenLearning(chatId, windowArg);
@@ -380,11 +385,17 @@ async function sendMenu(chatId = TELEGRAM_CHAT_ID) {
   });
 }
 
-export async function sendPnl(chatId, query = null) {
-  const modeLines = [
-    summarizeModePnl('dry_run', 'Dry-run Trade'),
-    summarizeModePnl('live', 'Live Trade'),
-  ];
+export async function sendPnl(chatId, query = null, modeFilter = 'all', windowArg = '12h') {
+  const windowMs = windowArg === 'all' ? 0 : parseWindowMs(windowArg);
+  const windowLabel = windowArg === 'all' ? 'All Time' : formatWindow(windowMs);
+
+  const modeLines = [];
+  if (modeFilter === 'all' || modeFilter === 'dry_run') {
+    modeLines.push(summarizeModePnl('dry_run', 'Dry-run Trade', windowMs));
+  }
+  if (modeFilter === 'all' || modeFilter === 'live') {
+    modeLines.push(summarizeModePnl('live', 'Live Trade', windowMs));
+  }
 
   const wallets = savedWallets();
   const walletLines = [];
@@ -404,12 +415,14 @@ export async function sendPnl(chatId, query = null) {
     }
     walletLines.push(`<b>Wallet PnL</b>\n${chunks.join('\n\n')}`);
   }
-  const text = `📊 <b>PnL</b>\n\n${modeLines.join('\n\n')}${walletLines.length ? `\n\n${walletLines.join('\n\n')}` : ''}`;
+  
+  const text = `📊 <b>PnL (${windowLabel})</b>\n\n${modeLines.join('\n\n')}${walletLines.length ? `\n\n${walletLines.join('\n\n')}` : ''}`;
   const pnlKeyboard = navKeyboard([[{ text: '🏆 Top Performance', callback_data: 'menu:toppnl' }]]);
   return query ? editMenuMessage(query, text, pnlKeyboard) : bot.sendMessage(chatId, text, { parse_mode: 'HTML', ...pnlKeyboard });
 }
 
-function summarizeModePnl(mode, title) {
+function summarizeModePnl(mode, title, windowMs = 0) {
+  const cutoff = windowMs > 0 ? now() - windowMs : 0;
   const row = db.prepare(`
     SELECT
       COUNT(*) AS total_positions,
@@ -419,8 +432,8 @@ function summarizeModePnl(mode, title) {
       SUM(CASE WHEN status = 'closed' THEN COALESCE(pnl_percent, 0) ELSE 0 END) AS total_pnl_percent,
       SUM(CASE WHEN status = 'closed' THEN COALESCE(pnl_sol, 0) ELSE 0 END) AS total_pnl_sol
     FROM dry_run_positions
-    WHERE COALESCE(execution_mode, 'dry_run') = ?
-  `).get(mode);
+    WHERE COALESCE(execution_mode, 'dry_run') = ? AND opened_at_ms >= ?
+  `).get(mode, cutoff);
 
   const closed = Number(row?.closed_positions || 0);
   const wins = Number(row?.wins || 0);

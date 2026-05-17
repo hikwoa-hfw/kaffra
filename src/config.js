@@ -21,7 +21,9 @@ export const SOLANA_PRIVATE_KEY = process.env.SOLANA_PRIVATE_KEY || process.env.
 export const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 export const SOLANA_WS_URL = process.env.SOLANA_WS_URL || `wss://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 export const JUPITER_SWAP_BASE_URL = process.env.JUPITER_SWAP_BASE_URL || 'https://api.jup.ag/swap/v2';
-export const JUPITER_SLIPPAGE_BPS = Number(process.env.JUPITER_SLIPPAGE_BPS || 300);
+export const JUPITER_SLIPPAGE_BPS = Number(process.env.JUPITER_SLIPPAGE_BPS || 300); // 3%
+export const JUPITER_PRIORITY_FEE_LAMPORTS = Number(process.env.JUPITER_PRIORITY_FEE_LAMPORTS || 100_000); 
+export const JITO_TIP_LAMPORTS = Number(process.env.JITO_TIP_LAMPORTS || 10_000);
 export const LIVE_MIN_SOL_RESERVE_LAMPORTS = Math.floor(Number(process.env.LIVE_MIN_SOL_RESERVE || 0.02) * 1_000_000_000);
 export const LLM_BASE_URL = process.env.LLM_BASE_URL || 'https://api.minimax.io/v1';
 export const LLM_API_KEY = process.env.LLM_API_KEY || '';

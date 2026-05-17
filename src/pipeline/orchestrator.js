@@ -31,7 +31,13 @@ export async function processCandidateFromSignals(signals) {
 }
 
 async function _processCandidateFromSignals(signals) {
-  // Skip if max positions reached — don't waste enrichment/LLM calls
+  const currentOpenPositions = openPositions();
+  const isAlreadyOpen = currentOpenPositions.some(p => p.mint === signals.mint);
+  if (isAlreadyOpen) {
+    log('agent', `Position already open for ${signals.mint.slice(0, 8)}, skipping to prevent DCA.`);
+    return;
+  }
+
   if (!canOpenMorePositions()) {
     const strat = activeStrategy();
     const max = strat.max_open_positions ?? numSetting('max_open_positions', 3);
@@ -68,6 +74,14 @@ async function _processCandidateFromSignals(signals) {
     };
   } else {
     rows = recentEligibleCandidates(numSetting('llm_candidate_pick_count', 10));
+    
+    if (!rows.find(r => r.id === candidateId)) {
+      const selfRow = candidateById(candidateId);
+      if (selfRow) {
+        rows.unshift(selfRow); 
+      }
+    }
+
     batchDecision = await decideCandidateBatch(rows, candidateId);
     batchId = storeBatchDecision(candidateId, rows, batchDecision);
   }
