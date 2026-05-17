@@ -474,7 +474,7 @@ export function initDb() {
     trending_max_rug_ratio: 0.3,
     trending_max_bundler_rate: 0.5,
     position_size_sol: 0.1,
-    max_open_positions: 3,
+    max_open_positions: 5,
     tp_percent: 999999,
     sl_percent: -20,
     trailing_enabled: false,
