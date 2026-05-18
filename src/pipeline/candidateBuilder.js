@@ -375,24 +375,24 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
       telegram: graduatedCoin?.telegram || gmgn?.link?.telegram || '',
     },
     metrics: {
-      buySellRatio: (() => {
-        const buys = Number(trendingToken?.buys ?? 0);
-        const sells = Number(trendingToken?.sells ?? 0);
-        if (buys <= 0 && sells <= 0) return 0;
+      // buySellRatio: (() => {
+      //   const buys = Number(trendingToken?.buys ?? 0);
+      //   const sells = Number(trendingToken?.sells ?? 0);
+      //   if (buys <= 0 && sells <= 0) return 0;
+      //   if (sells <= 0) return buys > 0 ? 999 : 0;
+      //   return buys / sells;
+      // })(),
+      bsCountRatio5m: (() => {
+        const buys = Number(gmgn?.price?.buys_5m ?? 0);
+        const sells = Number(gmgn?.price?.sells_5m ?? 0);
         if (sells <= 0) return buys > 0 ? 999 : 0;
-        return buys / sells;
+        return parseFloat((buys / sells).toFixed(2));
       })(),
-      bsCountRatio1h: (() => {
-        const buys = Number(gmgn?.price?.buys_1h ?? 0);
-        const sells = Number(gmgn?.price?.sells_1h ?? 0);
-        if (sells <= 0) return buys > 0 ? 999 : 0;
-        return parseFloat((buys / sells).toFixed(4));
-      })(),
-      bsVolRatio1h: (() => {
-        const buyVol = Number(gmgn?.price?.buy_volume_1h ?? 0);
-        const sellVol = Number(gmgn?.price?.sell_volume_1h ?? 0);
+      bsVolRatio5m: (() => {
+        const buyVol = Number(gmgn?.price?.buy_volume_5m ?? 0);
+        const sellVol = Number(gmgn?.price?.sell_volume_5m ?? 0);
         if (sellVol <= 0) return buyVol > 0 ? 999 : 0;
-        return parseFloat((buyVol / sellVol).toFixed(4));
+        return parseFloat((buyVol / sellVol).toFixed(2));
       })(),
       priceUsd,
       marketCapUsd,

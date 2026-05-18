@@ -104,6 +104,7 @@ async function fetchJupiterHolders(mint) {
       timeout: 10_000,
       headers: JSON_HEADERS,
     });
+   // console.log(`res holder ${mint} : ${JSON.stringify(res.data)}`)
     const holders = Array.isArray(res.data?.holders) ? res.data.holders : [];
     const total = holders.reduce((sum, holder) => sum + Number(holder.amount || 0), 0);
     const mapped = holders.map((holder, index) => {

@@ -40,24 +40,22 @@ export async function generateLessons(summary) {
   const fallback = fallbackLessons(summary);
   if (!ENABLE_LLM || !LLM_API_KEY) return { lessons: fallback, raw: { fallback: true } };
   
-  // AI QUANT SCIENTIST & TRENCH MASTER PROMPT
+ // AI QUANT SCIENTIST PROMPT (CONCISE BUT CONTEXTUAL)
   const system = [
-    "You are Kaffra's chief Quant Scientist and an elite Solana meme coin trench master.",
-    "Your task is to conduct a rigorous, multi-dimensional retrospective analysis of recent dry-run trading evidence.",
-    "Do not provide shallow, generic, or superficial advice (e.g., 'avoid high market cap').",
-    "You must systematically diagnose the underlying market mechanics, structural failures, and operational successes of the trades.",
-    "Analyze the exact mathematical correlations between 'byRoute' win rates, fee density, entry Market Cap tiers, exit reasons, and the LLM average confidence scores.",
-    "Provide deeply granular, highly precise, and richly detailed operational lessons.",
-    "Each lesson must explain the deep chain of logic: WHAT happened, WHY it happened on-chain (e.g., sniper behavior, liquidity traps, developer dumping), and EXACTLY HOW to modify our screening thresholds to fix it.",
-    "Return strict JSON matching the requested schema."
+    "You are Kaffra's Quant.",
+    "Diagnose trading data to find failure patterns and mathematical correlations.",
+    "CRITICAL: Strike a balance. Do not write long essays, but provide enough context so the logic is clear. Aim for 1-2 clear sentences per section.",
+    "Format strictly: 'RULE: [Precise operational action] | WHY: [The exact on-chain/math logic backing it]'.",
+    "Do NOT create rules that contradict core metrics (e.g., do not ban Top 20 holders if they are < 45%). Focus on specific route combinations, MCap tiers, or ratio anomalies.",
+    "Return strict JSON."
   ].join(' ');
 
   const user = {
-    task: 'Perform an exhaustive post-mortem analysis of the provided trading window and generate deep, multi-sentence master screening lessons.',
+    task: 'Generate up to 4 concise, data-backed screening rules.',
     output_schema: {
       lessons: [
         { 
-          lesson: 'A comprehensive, multi-sentence operational rule combined with its deep causal analysis and concrete data evidence. (Example format: "Restrict route \'smart_money\' strictly to entries below $750k MCap. Data shows our win rate drops to 0% across 6 trades when entering higher, indicating that late-stage buyers on this route are serving exclusively as exit liquidity for snipers. For high MCap tiers, pivot screening to prioritize tokens with developer token burn confirmation and a maximum top-20 holder concentration of 25% to mitigate cabal dumps.").'
+          lesson: 'RULE: Restrict fee_trending route >$80k MCap unless whaleWallets >= 1. | WHY: 0% win-rate across 3 trades shows late buyers act as exit liquidity without stealth accumulation support.' 
         }
       ],
     },
