@@ -137,13 +137,11 @@ export function filterCandidate(candidate) {
   const dexPaidEnabled = boolSetting('dex_paid', false);
   const tokenAgeMs = Number(candidate.metrics.tokenAgeMs || 0);
 
-  // Wallet-signal routes (smart_wallet_buy / kol_buy) bypass fee requirement —
-  // the trigger is the wallet buy itself, not a fee claim event.
+  // Wallet-signal routes (smart_wallet_buy / kol_buy) bypass fee requirement
   const isWalletSignal = candidate.walletSignal != null ||
     candidate.signals?.route === 'smart_wallet_buy' ||
     candidate.signals?.route === 'kol_buy';
 
-  // Fee claim check
   if (candidate.feeClaim) {
     const minFee = strat.min_fee_claim_sol ?? 0.5;
     if (minFee > 0 && feeSol < minFee) {
@@ -153,7 +151,6 @@ export function filterCandidate(candidate) {
     failures.push('fee claim: missing (required by strategy)');
   }
 
-  // Market cap checks
   if (strat.min_mcap_usd > 0 && (!Number.isFinite(mcap) || mcap < strat.min_mcap_usd)) {
     failures.push(`market cap min: ${mcap} < ${strat.min_mcap_usd}`);
   }
@@ -161,7 +158,6 @@ export function filterCandidate(candidate) {
     failures.push(`market cap max: ${mcap} > ${strat.max_mcap_usd}`);
   }
 
-  // GMGN fees — only enforce when GMGN data is available; Jupiter has no equivalent
   if (strat.min_gmgn_total_fee_sol > 0 && candidate.gmgn !== null && totalFees < strat.min_gmgn_total_fee_sol) {
     failures.push(`GMGN total fees: ${totalFees} < ${strat.min_gmgn_total_fee_sol}`);
   }
@@ -173,45 +169,37 @@ export function filterCandidate(candidate) {
     }
   }
 
-  // Graduated volume — only enforce when the token actually has graduated data
   if (strat.min_graduated_volume_usd > 0 && candidate.graduation && gradVolume < strat.min_graduated_volume_usd) {
     failures.push(`graduated volume: ${gradVolume} < ${strat.min_graduated_volume_usd}`);
   }
 
-  // Holder count
   if (strat.min_holders > 0 && holderCount < strat.min_holders) {
     failures.push(`holders: ${holderCount} < ${strat.min_holders}`);
   }
 
-  // Top holder concentration
   if (strat.max_top20_holder_percent < 100 && Number.isFinite(maxHolder) && maxHolder > strat.max_top20_holder_percent) {
     failures.push(`max top holder: ${maxHolder}% > ${strat.max_top20_holder_percent}%`);
   }
 
-  // Saved wallet holders
   if (strat.min_saved_wallet_holders > 0 && savedCount < strat.min_saved_wallet_holders) {
     failures.push(`saved wallet holders: ${savedCount} < ${strat.min_saved_wallet_holders}`);
   }
 
-  // Smart wallet holders
   const smartWalletCount = candidate.savedWalletExposure.smartWalletCount ?? 0;
   if (strat.min_smart_wallet_holders > 0 && smartWalletCount < strat.min_smart_wallet_holders) {
     failures.push(`smart wallet holders: ${smartWalletCount} < ${strat.min_smart_wallet_holders}`);
   }
 
-  // KOL holders
   const kolCount = candidate.savedWalletExposure.kolCount ?? 0;
   if (strat.min_kol_holders > 0 && kolCount < strat.min_kol_holders) {
     failures.push(`KOL holders: ${kolCount} < ${strat.min_kol_holders}`);
   }
 
-  // GMGN/Jupiter smart degen count (organic buyers detected by the trending source)
   const smartDegenCount = candidate.metrics.trendingSmartDegenCount ?? 0;
   if (strat.min_smart_degen_count > 0 && smartDegenCount < strat.min_smart_degen_count) {
     failures.push(`smart degen count: ${smartDegenCount} < ${strat.min_smart_degen_count}`);
   }
 
-  // Dev wallet checks
   const dev = candidate.devWallet;
   if (dev) {
     if (strat.require_dev_holding && !dev.isHolding) {
@@ -222,7 +210,6 @@ export function filterCandidate(candidate) {
     }
   }
 
-  // ATH distance (dip buy strategy)
   if (strat.token_age_max_ms > 0) {
     if (tokenAgeMs <= 0) {
       failures.push('token age: unavailable while age filter is enabled');
@@ -256,7 +243,6 @@ export function filterCandidate(candidate) {
     }
   }
 
-  // Trending filters
   if (candidate.trending) {
     if (strat.trending_min_volume_usd > 0 && trendingVolume < strat.trending_min_volume_usd) {
       failures.push(`trending volume: ${trendingVolume} < ${strat.trending_min_volume_usd}`);
@@ -285,14 +271,12 @@ export function filterCandidate(candidate) {
     failures.push('dex paid: required but token is not flagged as paid');
   }
 
-  // Trench score
   const trenchScore = candidate.metrics.trenchScore ?? 0;
   const minTrenchScore = strat.min_trench_score ?? 0;
   if (minTrenchScore > 0 && trenchScore < minTrenchScore) {
     failures.push(`trench score: ${trenchScore} < min ${minTrenchScore}`);
   }
 
-  // Rat wallet holders
   const ratWalletCount = candidate.savedWalletExposure.ratWalletCount ?? 0;
   const maxRatWalletHolders = strat.max_rat_wallet_holders ?? 0;
   if (maxRatWalletHolders > 0 && ratWalletCount > maxRatWalletHolders) {
@@ -307,6 +291,57 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
   const gmgn = await fetchGmgnTokenInfo(mint);
   const jupiterAsset = await fetchJupiterAsset(mint);
   const holders = await fetchJupiterHolders(mint);
+
+  // --- TRENCH MASTER FIX: DYNAMIC LIQUIDITY POOL EXTRACTION ---
+  // Ekstrak semua pool address secara dinamis dari API tanpa hardcode
+  const rawPoolAddresses = [
+    gmgn?.pool?.pool_address,
+    gmgn?.pool_address,
+    gmgn?.biggest_pool_address,
+    trendingToken?.pool_address,
+    graduatedCoin?.poolAddress
+  ].filter(Boolean);
+
+  // Hilangkan duplikasi address
+  const systemAddresses = [...new Set(rawPoolAddresses)];
+
+  if (holders) {
+    let lpTotalPercent = 0;
+    const lpHoldersToRemove = new Set();
+
+    // 1. Cari dompet LP di dalam array top20 berdasarkan address yang persis sama
+    if (Array.isArray(holders.top20)) {
+      const foundLPs = holders.top20.filter(h => systemAddresses.includes(h.address));
+      
+      foundLPs.forEach(lp => {
+        lpTotalPercent += Number(lp.percent || lp.pct || 0);
+        lpHoldersToRemove.add(lp.address); // Tandai address yang harus dibuang
+      });
+    }
+
+    // Set nilai final persentase LP
+    holders.lpPercent = Number(lpTotalPercent.toFixed(2));
+
+    if (lpHoldersToRemove.size > 0) {
+      // 2. Cabut LP dari array top20 dan hitung ulang konsentrasi manusia
+      if (Array.isArray(holders.top20)) {
+        holders.top20Percent = Math.max(0, (holders.top20Percent || 0) - lpTotalPercent);
+        holders.top20 = holders.top20.filter(h => !lpHoldersToRemove.has(h.address));
+        
+        // Cari maxHolderPercent baru (Paus Manusia)
+        holders.maxHolderPercent = holders.top20.length > 0 
+          ? Math.max(...holders.top20.map(h => Number(h.percent || h.pct || 0)))
+          : 0;
+      }
+
+      // 3. Pastikan LP juga dicabut dari array holders utama (jika API memberikannya)
+      if (Array.isArray(holders.holders)) {
+        holders.holders = holders.holders.filter(h => !lpHoldersToRemove.has(h.address));
+      }
+    }
+  }
+  // --------------------------------------------------------------------
+
   const chart = await fetchJupiterChartContext(mint);
   const savedWalletExposure = await fetchSavedWalletExposure(mint, holders);
   const twitterNarrative = await fetchTwitterNarrative(graduatedCoin || jupiterAsset, gmgn);

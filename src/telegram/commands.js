@@ -1,6 +1,6 @@
 import { bot } from './bot.js';
 import { TELEGRAM_CHAT_ID } from '../config.js';
-import { now, json, parseWindowMs } from '../utils.js';
+import { now, json, parseWindowMs, formatWindow } from '../utils.js';
 import { escapeHtml, fmtPct } from '../format.js';
 import { db } from '../db/connection.js';
 import { numSetting, boolSetting, setSetting, activeStrategy, setActiveStrategy, strategyById, updateStrategyConfig } from '../db/settings.js';
