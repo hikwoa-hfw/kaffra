@@ -382,13 +382,13 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
         if (sells <= 0) return buys > 0 ? 999 : 0;
         return buys / sells;
       })(),
-      buySellCountRatio1h: (() => {
+      bsCountRatio1h: (() => {
         const buys = Number(gmgn?.price?.buys_1h ?? 0);
         const sells = Number(gmgn?.price?.sells_1h ?? 0);
         if (sells <= 0) return buys > 0 ? 999 : 0;
         return parseFloat((buys / sells).toFixed(4));
       })(),
-      buySellVolumeRatio1h: (() => {
+      bsVolRatio1h: (() => {
         const buyVol = Number(gmgn?.price?.buy_volume_1h ?? 0);
         const sellVol = Number(gmgn?.price?.sell_volume_1h ?? 0);
         if (sellVol <= 0) return buyVol > 0 ? 999 : 0;

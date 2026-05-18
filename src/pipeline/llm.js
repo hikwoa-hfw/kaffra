@@ -66,7 +66,7 @@ export function compactCandidateForLlm(row) {
     smartWallets: c.gmgn?.wallet_tags_stat?.smart_wallet || 0,
     ratWallets: c.gmgn?.wallet_tags_stat?.rat_trader_wallets || 0,
     whaleWallets: c.gmgn?.wallet_tags_stat?.whale_wallets || 0,
-    volume1m: Math.round(Number(c.gmgn?.price?.volume_1m || 0)),
+    volume5m: Math.round(Number(c.gmgn?.price?.volume_5m || 0)),
     visitingCount: c.gmgn?.visiting_count || 0,
     holders: {
       count: c.holders?.count,
@@ -121,7 +121,7 @@ export async function decideCandidateBatch(rows, triggerCandidateId) {
     '3. LIQUIDITY POOL: "lpPercent" is cleanly separated. If lpPercent < 25%, the liquidity size is healthy and safe.',
     '4. FEE DENSITY IS KING: "feeDensityMultiplier" > 1.5x is EXTREMELY BULLISH. < 0.5x is a RED FLAG.',
     '5. DEEP DIP vs FALLING KNIFE: Real trench tokens often experience brutal 80% pullbacks before exploding again. A pullback of 40% to 85% from ATH is a PRIME "Buy the Dip" opportunity AS LONG AS fee density is high (>1.5x). It is ONLY a "falling knife" if down > 85% with dead volume.',
-    '6. VOLUME & TRENDING CONFLUENCE: Check "volume1m" and "visitingCount". If volume1m > 1000, it indicates massive immediate buying pressure. If visitingCount > 50, it confirms genuine organic trending status. Use these to boost BUY conviction.',
+    '6. VOLUME & TRENDING CONFLUENCE: Check "volume5m" and "visitingCount". If volume5m > 7000, it indicates massive immediate buying pressure. If visitingCount > 50, it confirms genuine organic trending status. Use these to boost BUY conviction.',
     '7. BUY/SELL RATIO: Check metrics.buySellRatio. If < 1, it is BEARISH (more sellers). If between 1 and 2.2, it is NEUTRAL leaning BULLISH. If > 2.2, it is HIGHLY BULLISH.',
     '8. WHALE WALLETS (CRITICAL CATALYST): If "whaleWallets" >= 1, it is a MASSIVE bullish signal indicating deep-pocket accumulation. This MUST drastically increase your confidence score. If the chart is in a prime dip zone, use this to confidently issue a BUY. If the chart position is suboptimal, lean heavily towards a high-score WATCH or a cautious BUY instead of passing.', // <-- ATURAN BARU PAUS
     '9. SMART MONEY & RATS: "smartWallets" >= 2 is a nice bonus. "ratWallets" (1 to 5) are normal noise; penalize only if > 10.',
