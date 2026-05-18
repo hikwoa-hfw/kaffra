@@ -133,6 +133,7 @@ export function filterCandidate(candidate) {
     candidate.trending?.holder_growth ?? candidate.trending?.holders_growth ?? 0,
   );
   const buySellRatio = Number(candidate.metrics.buySellRatio || 0);
+  const countRatio = Math.round(Number(candidate.gmgn?.price))
   const chartAthDistance = Number(candidate.chart?.distanceFromAthPercent);
   const dexPaidEnabled = boolSetting('dex_paid', false);
   const tokenAgeMs = Number(candidate.metrics.tokenAgeMs || 0);
@@ -362,6 +363,7 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
     trendingToken ? 'trending' : null,
   ].filter(Boolean).join('_');
 
+ // console.log(`[trending_check] buys: ${trendingToken?.buys}, sells: ${trendingToken?.sells}`)
   const candidate = {
     token: {
       mint,
@@ -379,6 +381,18 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
         if (buys <= 0 && sells <= 0) return 0;
         if (sells <= 0) return buys > 0 ? 999 : 0;
         return buys / sells;
+      })(),
+      buySellCountRatio1h: (() => {
+        const buys = Number(gmgn?.price?.buys_1h ?? 0);
+        const sells = Number(gmgn?.price?.sells_1h ?? 0);
+        if (sells <= 0) return buys > 0 ? 999 : 0;
+        return parseFloat((buys / sells).toFixed(4));
+      })(),
+      buySellVolumeRatio1h: (() => {
+        const buyVol = Number(gmgn?.price?.buy_volume_1h ?? 0);
+        const sellVol = Number(gmgn?.price?.sell_volume_1h ?? 0);
+        if (sellVol <= 0) return buyVol > 0 ? 999 : 0;
+        return parseFloat((buyVol / sellVol).toFixed(4));
       })(),
       priceUsd,
       marketCapUsd,
@@ -423,5 +437,6 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
   };
   candidate.metrics.trenchScore = computeTrenchScore(candidate);
   candidate.filters = filterCandidate(candidate);
+  //console.log(`[builder] :${JSON.stringify(candidate)}`);
   return candidate;
 }

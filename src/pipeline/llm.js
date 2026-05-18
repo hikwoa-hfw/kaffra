@@ -33,7 +33,7 @@ export function compactCandidateForLlm(row) {
   const c = row.candidate;
   const athWindow = c.chart?.windows?.find(window => window.label === 'ath_context_24h_5m' && window.available)
     || c.chart?.windows?.find(window => window.label === 'recent_24h_5m' && window.available);
-console.log(`[c] : ${JSON.stringify(c)}`);
+//console.log(`[c] : ${JSON.stringify(c)}`);
   // Kalkulasi Quant: Fee Density (1.0x = 1 SOL fee per $10k MCap)
   const mcap = Number(c.metrics?.marketCapUsd || c.metrics?.graduatedMarketCapUsd || 0);
   
@@ -65,11 +65,14 @@ console.log(`[c] : ${JSON.stringify(c)}`);
     organicBuyer5m:c.trending?.stats5m?.numOrganicBuyers,
     smartWallets: c.gmgn?.wallet_tags_stat?.smart_wallet || 0,
     ratWallets: c.gmgn?.wallet_tags_stat?.rat_trader_wallets || 0,
+    whaleWallets: c.gmgn?.wallet_tags_stat?.whale_wallets || 0,
+    volume1m: Math.round(Number(c.gmgn?.price?.volume_1m || 0)),
+    visitingCount: c.gmgn?.visiting_count || 0,
     holders: {
       count: c.holders?.count,
       top20Percent: c.holders?.top20Percent,
       maxHolderPercent: c.holders?.maxHolderPercent,
-      lpPercent: c.holders?.lpPercent || 0 // <-- Data LP terpisah masuk ke LLM
+      lpPercent: c.holders?.lpPercent || 0
     },
     chart: {
       purpose: 'ATH/range context only. Do not treat large 24h change as bullish/bearish momentum by itself.',
@@ -107,26 +110,27 @@ export async function decideCandidateBatch(rows, triggerCandidateId) {
     };
   }
 
- // TRENCH MASTER SYSTEM PROMPT (WITH SEPARATED LP LOGIC)
+// TRENCH MASTER SYSTEM PROMPT (DEEP DIP, WHALE TRACKING & EXTREME MOMENTUM V4)
   const system = [
     'You are Kaffra, an elite quantitative Solana meme coin analyst.',
     'Return strict JSON only.',
     'You receive up to 10 recently matched candidates. Pick MAXIMUM ONE solid candidate for a high-probability short-term momentum trade, or use WATCH/PASS.',
     'RULES OF THE TRENCH:',
-    '1. BALANCED QUANT SNIPER: You are highly selective but pragmatic. Meme coins are chaotic; seek strong statistical confluence rather than demanding absolute perfection.',
+    '1. BALANCED QUANT SNIPER: You are highly selective but pragmatic. Seek strong statistical confluence.',
     '2. HOLDER DISTRIBUTION: Top 20 holders < 45% is the golden zone. Strictly PASS if a single non-developer wallet (maxHolderPercent) holds > 15%.',
-    '3. LIQUIDITY POOL: "lpPercent" is cleanly separated from normal holders. If lpPercent < 25%, the liquidity size is healthy and safe. Do not confuse the LP with a whale or a cabal.', // <-- ATURAN BARU LP
-    '4. FEE DENSITY IS KING: "feeDensityMultiplier" is your primary edge. > 1.5x is EXTREMELY BULLISH. < 0.5x is a RED FLAG.',
-    '5. BUY THE DIP vs FALLING KNIFE: A pullback of 20%-50% from ATH is a PRIME "Buy the Dip" opportunity AS LONG AS fee density remains high (>1.5x). It is only a "falling knife" if down > 80% with dead volume.',
-    '6. SMART MONEY (BONUS MULTIPLIER): Treat "smartWallets" as a confluence booster. If >= 2, increase your bullish conviction. If 0, rely purely on Fee Density and chart momentum.',
-    '7. RAT WALLET NOISE: "ratWallets" (1 to 5) are natural parasites. Ignore them. ONLY penalize if ratWallets exceed 10.',
-    '8. VERDICTS: Use BUY for prime setups. Use WATCH if it needs consolidation. Use PASS for obvious dumps or dead charts.',
-    '9. REDEFINING CONFIDENCE: Confidence (0-100) MUST represent the "Overall Bullish & Safety Score" of the token.',
-    '10. EXACT GRANULAR NUMBERS: DO NOT round your confidence scores to multiples of 5 (e.g., use 17, 43, 72, 88).',
-    '11. VERDICT ALIGNMENT: If you assign a BUY, the score MUST be >= 70. If WATCH, the score MUST be between 40 and 69. If PASS, the score MUST be < 40.',
+    '3. LIQUIDITY POOL: "lpPercent" is cleanly separated. If lpPercent < 25%, the liquidity size is healthy and safe.',
+    '4. FEE DENSITY IS KING: "feeDensityMultiplier" > 1.5x is EXTREMELY BULLISH. < 0.5x is a RED FLAG.',
+    '5. DEEP DIP vs FALLING KNIFE: Real trench tokens often experience brutal 80% pullbacks before exploding again. A pullback of 40% to 85% from ATH is a PRIME "Buy the Dip" opportunity AS LONG AS fee density is high (>1.5x). It is ONLY a "falling knife" if down > 85% with dead volume.',
+    '6. VOLUME & TRENDING CONFLUENCE: Check "volume1m" and "visitingCount". If volume1m > 1000, it indicates massive immediate buying pressure. If visitingCount > 50, it confirms genuine organic trending status. Use these to boost BUY conviction.',
+    '7. BUY/SELL RATIO: Check metrics.buySellRatio. If < 1, it is BEARISH (more sellers). If between 1 and 2.2, it is NEUTRAL leaning BULLISH. If > 2.2, it is HIGHLY BULLISH.',
+    '8. WHALE WALLETS (CRITICAL CATALYST): If "whaleWallets" >= 1, it is a MASSIVE bullish signal indicating deep-pocket accumulation. This MUST drastically increase your confidence score. If the chart is in a prime dip zone, use this to confidently issue a BUY. If the chart position is suboptimal, lean heavily towards a high-score WATCH or a cautious BUY instead of passing.', // <-- ATURAN BARU PAUS
+    '9. SMART MONEY & RATS: "smartWallets" >= 2 is a nice bonus. "ratWallets" (1 to 5) are normal noise; penalize only if > 10.',
+    '10. VERDICTS: Use BUY for prime setups. Use WATCH if it needs consolidation. Use PASS for obvious dumps.',
+    '11. REDEFINING CONFIDENCE: Confidence (0-100) MUST represent the "Overall Bullish Score". DO NOT round to multiples of 5 (e.g., use 17, 43, 72, 88).',
+    '12. VERDICT ALIGNMENT: BUY must have score >= 70. WATCH is 40-69. PASS is < 40.',
   ].join(' ');
 
-  const user = {
+ const user = {
     task: 'Analyze the candidates on-chain metrics and chart context. Pick the absolute safest and most explosive gem, or choose none. Follow the trench rules strictly. YOUR OUTPUT MUST BE 100% VALID JSON. Do not use unescaped double quotes inside strings.',
     recent_lessons: activeLessonsForPrompt(),
     output_schema: {
@@ -136,8 +140,8 @@ export async function decideCandidateBatch(rows, triggerCandidateId) {
       confidence: 'number 0-100',
       reason: 'Strict trench analysis explaining WHY it is a gem or a trap. Avoid using double quotes inside this text.',
       risks: ['Risk 1', 'Risk 2', 'Risk 3'], 
-      suggested_tp_percent: 'positive number (e.g., 10 to 30)',
-      suggested_sl_percent: 'negative number (e.g., -30 to -15)',
+      suggested_tp_percent: 'positive number (e.g., 10 to 50)',
+      suggested_sl_percent: 'negative number STRICTLY between -35 and -15',
     },
     trigger_candidate_id: triggerCandidateId,
     candidates: rows.map(compactCandidateForLlm),
