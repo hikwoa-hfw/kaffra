@@ -6,6 +6,8 @@ import { fetchSavedWalletExposure } from '../enrichment/wallets.js';
 import { fetchTwitterNarrative } from '../enrichment/twitter.js';
 import { extractDevAddress, checkDevHolding } from '../enrichment/devWallet.js';
 import { gmgnLink } from '../format.js';
+import { computeFibonacci } from './fibonacci.js';
+import { fetchOHLC } from '../enrichment/fetchOHLC.js';
 
 function detectDexPaid({ gmgn, graduatedCoin, trendingToken, jupiterAsset }) {
   const values = [
@@ -344,6 +346,9 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
   // --------------------------------------------------------------------
 
   const chart = await fetchJupiterChartContext(mint);
+  const poolAddress = gmgn?.pool?.pool_address || gmgn?.biggest_pool_address || graduatedCoin?.poolAddress;
+  const ohlcCandles = await fetchOHLC(poolAddress, 'minute', 5, 100);
+  const athPrice    = Number(gmgn?.ath_price ?? 0) || null;
   const savedWalletExposure = await fetchSavedWalletExposure(mint, holders);
   const twitterNarrative = await fetchTwitterNarrative(graduatedCoin || jupiterAsset, gmgn);
   const devAddress = extractDevAddress({ graduatedCoin, gmgn, jupiterAsset });
@@ -429,6 +434,7 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
     jupiterAsset,
     holders,
     chart,
+    fibonacci: computeFibonacci(ohlcCandles, priceUsd, athPrice),
     savedWalletExposure,
     devWallet,
     twitterNarrative,
@@ -437,6 +443,6 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
   };
   candidate.metrics.trenchScore = computeTrenchScore(candidate);
   candidate.filters = filterCandidate(candidate);
-  //console.log(`[builder] :${JSON.stringify(candidate)}`);
+  //console.log(`[builders] :${JSON.stringify(candidate)}`);
   return candidate;
 }
