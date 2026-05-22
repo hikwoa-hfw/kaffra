@@ -33,17 +33,17 @@ export function compactCandidateForLlm(row) {
   const c = row.candidate;
   const athWindow = c.chart?.windows?.find(window => window.label === 'ath_context_24h_5m' && window.available)
     || c.chart?.windows?.find(window => window.label === 'recent_24h_5m' && window.available);
-//console.log(`[c] : ${JSON.stringify(c)}`);
-//console.log(`[c]: "name": ${c.token?.name}, "mint" : trade.padre.gg/trade/solana${c.token?.mint}, "metrics" : ${JSON.stringify(c.metrics)})`)
+  //console.log(`[c] : ${JSON.stringify(c)}`);
+  //console.log(`[c]: "name": ${c.token?.name}, "mint" : trade.padre.gg/trade/solana${c.token?.mint}, "metrics" : ${JSON.stringify(c.metrics)})`)
   // Kalkulasi Quant: Fee Density (1.0x = 1 SOL fee per $10k MCap)
   const mcap = Number(c.metrics?.marketCapUsd || c.metrics?.graduatedMarketCapUsd || 0);
-  
+
   // Ekstraksi fee tingkat lanjut: memindai seluruh letak data yang mungkin
   const feesSol = Number(
-    c.metrics?.gmgnTotalFeesSol || 
-    c.feeClaim?.distributedSol || 
-    c.feeClaim?.totalFeeSol || 
-    c.metrics?.totalFeeSol || 
+    c.metrics?.gmgnTotalFeesSol ||
+    c.feeClaim?.distributedSol ||
+    c.feeClaim?.totalFeeSol ||
+    c.metrics?.totalFeeSol ||
     0
   );
 
@@ -57,13 +57,13 @@ export function compactCandidateForLlm(row) {
     token: c.token,
     metrics: {
       ...c.metrics,
-      totalFeesSol: feesSol, 
+      totalFeesSol: feesSol,
       feeDensityMultiplier: Number(feeDensity.toFixed(2))
     },
     feeClaim: c.feeClaim,
     trending: c.trending,
     graduation: c.graduation,
-    organicBuyer5m:c.trending?.stats5m?.numOrganicBuyers,
+    organicBuyer5m: c.trending?.stats5m?.numOrganicBuyers,
     smartWallets: c.gmgn?.wallet_tags_stat?.smart_wallet || 0,
     ratWallets: c.gmgn?.wallet_tags_stat?.rat_trader_wallets || 0,
     whaleWallets: c.gmgn?.wallet_tags_stat?.whale_wallets || 0,
@@ -80,7 +80,7 @@ export function compactCandidateForLlm(row) {
       currentNative: c.chart?.currentNative,
       rangeHighNative: c.chart?.rangeHighNative,
       distanceFromAthPercent: c.chart?.distanceFromAthPercent ?? c.chart?.belowRangeHighPercent,
-      fibo: c.chart?.fibo,
+      fibo: c.fibonacci,
       topBlastRisk: c.chart?.topBlastRisk,
       athContext24h: athWindow ? {
         current: athWindow.current,
@@ -112,12 +112,12 @@ export async function decideCandidateBatch(rows, triggerCandidateId) {
     };
   }
 
-  // TRENCH MASTER SYSTEM PROMPT (V17 - ANTI-FOMO & EXHAUSTION GUARD)
+  // TRENCH MASTER SYSTEM PROMPT (V17 - DENGAN RSI)
   const system = [
     'You are Kaffra, an elite quantitative Solana analyst. Your core philosophy is based on Ponyin: "No token is perfectly flawless. Evaluate the aggregate weight. Do not miss explosive momentum, but NEVER buy the retail top."',
     'Return strict JSON only.',
     'Pick MAXIMUM ONE candidate for a high-probability trade, or output WATCH/PASS.',
-    
+
     '--- TIER 1: THE HARD RULES (NON-NEGOTIABLE) ---',
     '1. STRICT HOLDER GUARD: Top 20 holders < 45%. Max human holder < 15%. (Remember: LP is already extracted). If these exceed limits, instantly PASS.',
     '2. DYNAMIC LIQUIDITY: lpPercent < 45% (MCap < 40k) or < 25% (MCap > 40k) is healthy.',
@@ -132,7 +132,7 @@ export async function decideCandidateBatch(rows, triggerCandidateId) {
     '5. THE 60% PULLBACK REBIRTH: A drop of 40-80% from ATH is a prime consolidation phase. Extremely explosive if holder structure is clean.',
 
     '--- TIER 3: THE TECHNICAL ENHANCERS (SOFT RULES / BONUSES) ---',
-    '6. FIBONACCI TIMING (OPTIONAL): Use "chart.fibo.dipSignal" as a BONUS. "strong_dip" (Golden Pocket) is great. If Fibo data is missing or says "shallow_dip", DO NOT penalize the token if its Tier 2 Volume is massive and it is not an exhaustion top.',
+    '6. FIBONACCI & RSI TIMING (OPTIONAL): Check "chart.fibo.confluence". If it shows "max_conviction" or "high_conviction" (Golden Pocket + RSI Oversold), it is an excellent enhancer. However, if Fibo/RSI data is missing or null, DO NOT penalize the token and DO NOT mention it in your reason.',
     '7. ATS DIVERGENCE (OPTIONAL): Evaluate bscountRatio5m vs bsvolRatio5m.',
     '   - Panic Accumulation (Vol > Count, both < 1) or Stealth Entry (Vol > 1.2) are great BONUSES.',
     '   - Retail Trap (Count significantly outpaces Vol) is a warning. If volume5m is normal/low, downgrade. If volume is nuclear, rely on the Exhaustion Guard (Rule 4).',
@@ -140,35 +140,36 @@ export async function decideCandidateBatch(rows, triggerCandidateId) {
     '--- TIER 4: THE SCORING MATRIX ---',
     '8. SCORING LOGIC:',
     '   - [BUY 75-95%]: Tier 1 passes + Massive Volume5m + Strong Narrative + Healthy/Stealth ATS. Trigger BUY immediately.',
-    '   - [BUY 70-80%]: The Technical Sniper. Tier 1 passes + Normal volume + Perfect Fibo Golden Pocket + Whale Accumulation.',
+    '   - [BUY 70-80%]: The Technical Sniper. Tier 1 passes + Normal volume + max_conviction confluence + Whale Accumulation.',
     '   - [WATCH 40-69%]: Good token, but lacks explosive volume, OR it triggered the Exhaustion Top Warning (waiting for a dip).',
     '   - [PASS < 40%]: Fails Tier 1 Hard Rules.',
-    
+
     '9. WHALE WALLETS: If >= 1, scale up confidence.',
     '10. ADVISORY: recent_lessons are advisory. Tier 1 and Tier 2 rules take precedence.'
   ].join(' ');
 
   const user = {
-    task: 'Analyze the candidates on-chain metrics, Ponyin sanity checks, ATS divergence, and Fibo chart context. Pick the absolute safest and most explosive gem, or choose none. Follow the trench rules strictly. YOUR OUTPUT MUST BE 100% VALID JSON. Do not use unescaped double quotes inside strings.',
+    task: 'Analyze the candidates on-chain metrics, Ponyin sanity checks, ATS divergence, and Fibo chart context. Pick the absolute safest and most explosive gem, or choose none. Follow the trench rules strictly. YOUR OUTPUT MUST BE 100% VALID JSON. Do not use unescaped double quotes inside strings. Use pure DIGITS for numbers, NEVER use English words (e.g., write 30, never "thirty").',
     recent_lessons: activeLessonsForPrompt(),
     output_schema: {
       verdict: 'BUY|WATCH|PASS',
       selected_candidate_id: 'integer candidate_id when verdict is BUY, otherwise null',
       selected_mint: 'mint string when verdict is BUY, otherwise null',
       confidence: 'number 0-100',
-      reason: 'Strict trench analysis explaining WHY it is a gem or a trap. Justify using ATS Divergence, Fibo timing, and Wash Trading checks. Avoid using double quotes inside this text.',
-      risks: ['Risk 1', 'Risk 2', 'Risk 3'], 
+      reason: 'Strict trench analysis explaining WHY it is a gem or a trap. Justify using Volume, Holders, and ATS Divergence. Do NOT mention Fibo or RSI if the data is missing or unavailable. Avoid using double quotes inside this text.',
+      risks: ['Risk 1', 'Risk 2', 'Risk 3'],
       suggested_tp_percent: 'positive number (e.g., 10 to 50)',
-      suggested_sl_percent: 'negative number STRICTLY between -35 and -15',
+      suggested_sl_percent: '-35',
     },
     trigger_candidate_id: triggerCandidateId,
     candidates: rows.map(compactCandidateForLlm),
   };
+  console.log(`candidate: ${JSON.stringify(rows.map(compactCandidateForLlm))}`)
 
   try {
     const res = await axios.post(`${LLM_BASE_URL.replace(/\/$/, '')}/chat/completions`, {
       model: LLM_MODEL,
-      temperature: 0.11, 
+      temperature: 0.11,
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: JSON.stringify(user) },

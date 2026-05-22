@@ -348,6 +348,7 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
   const chart = await fetchJupiterChartContext(mint);
   const poolAddress = gmgn?.pool?.pool_address || gmgn?.biggest_pool_address || graduatedCoin?.poolAddress;
   const ohlcCandles = await fetchOHLC(poolAddress, 'minute', 5, 100);
+  const ohlcCandles1h = await fetchOHLC(poolAddress, 'hour', 1, 100);
   const athPrice    = Number(gmgn?.ath_price ?? 0) || null;
   const savedWalletExposure = await fetchSavedWalletExposure(mint, holders);
   const twitterNarrative = await fetchTwitterNarrative(graduatedCoin || jupiterAsset, gmgn);
@@ -367,7 +368,7 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
     graduatedCoin ? 'graduated' : null,
     trendingToken ? 'trending' : null,
   ].filter(Boolean).join('_');
-
+//console.log(`fibonacci : ${JSON.stringify(computeFibonacci(ohlcCandles, priceUsd, athPrice))}`)
  // console.log(`[trending_check] buys: ${trendingToken?.buys}, sells: ${trendingToken?.sells}`)
   const candidate = {
     token: {
@@ -434,7 +435,7 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
     jupiterAsset,
     holders,
     chart,
-    fibonacci: computeFibonacci(ohlcCandles, priceUsd, athPrice),
+    fibonacci: computeFibonacci(ohlcCandles, priceUsd, athPrice, ohlcCandles1h),
     savedWalletExposure,
     devWallet,
     twitterNarrative,
