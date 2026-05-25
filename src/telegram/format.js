@@ -1,4 +1,4 @@
-import { escapeHtml, fmtPct, fmtSol, fmtUsd, short, gmgnLink, txLink, accountLink } from '../format.js';
+import { escapeHtml, fmtPct, fmtSol, fmtUsd, short, gmgnLink, txLink, accountLink, padreLink } from '../format.js';
 import { now } from '../utils.js';
 import { strategyById } from '../db/settings.js';
 
@@ -30,7 +30,7 @@ export function candidateSummary(candidate, decision = null) {
     '',
     `Signal: <b>${escapeHtml(route)}</b>`,
     candidate.token.name || candidate.token.symbol ? `Name: <b>${escapeHtml(candidate.token.name || candidate.token.symbol)}${candidate.token.symbol && candidate.token.name ? ` (${escapeHtml(candidate.token.symbol)})` : ''}</b>` : null,
-    `Token: <a href="${gmgnLink(candidate.token.mint)}">${short(candidate.token.mint)}</a>`,
+    `Token: <a href="${padreLink(candidate.token.mint)}">${short(candidate.token.mint)}</a>`,
     `<code>${escapeHtml(candidate.token.mint)}</code>`,
     [
       `Mcap: ${fmtUsd(candidate.metrics.marketCapUsd)}`,
@@ -87,7 +87,7 @@ export function compactCandidateLine(row, index = null) {
   const signal = candidate.signals?.label || signalLabel(candidate.signals);
   return [
     `${prefix}<b>${escapeHtml(name)}</b>`,
-    `<a href="${gmgnLink(candidate.token.mint)}">${short(candidate.token.mint)}</a>`,
+    `<a href="${padreLink(candidate.token.mint)}">${short(candidate.token.mint)}</a>`,
     escapeHtml(signal),
     `mcap ${fmtUsd(candidate.metrics?.marketCapUsd)}`,
     `liq ${fmtUsd(candidate.metrics?.liquidityUsd)}`,
@@ -141,7 +141,7 @@ export function formatPosition(position) {
   const profitLockProgress = buildProfitLockProgress(strat, peakPnl);
   return [
     `📍 <b>${escapeHtml(position.symbol || short(position.mint))}</b> #${position.id}`,
-    `Token: <a href="${gmgnLink(position.mint)}">${short(position.mint)}</a>`,
+    `Token: <a href="${padreLink(position.mint)}">${short(position.mint)}</a>`,
     `Status: <b>${escapeHtml(position.status)}</b> · Mode: <b>${escapeHtml(position.execution_mode || 'dry_run')}</b> · Strategy: <b>${escapeHtml(position.strategy_id || 'sniper')}</b>`,
     `Hold: <b>${escapeHtml(formatHoldTime(position))}</b>`,
     position.entry_signature ? `Entry TX: <a href="${txLink(position.entry_signature)}">${short(position.entry_signature)}</a>` : null,

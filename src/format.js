@@ -24,6 +24,10 @@ export function fmtPct(value) {
   return Number.isFinite(n) ? `${n.toFixed(1)}%` : '?';
 }
 
+export function padreLink(mint) {
+  return `https://trade.padre.gg/trade/solana/${mint}`;
+}
+
 export function gmgnLink(mint) {
   return `https://gmgn.ai/sol/token/${mint}`;
 }
