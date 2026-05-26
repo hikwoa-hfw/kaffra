@@ -154,9 +154,35 @@ export async function handleApprovedBuy(selectedRow, decision, batchId, rows = [
   const mode = tradingMode();
   const strat = activeStrategy();
   const maxOpenPositions = strat.max_open_positions ?? numSetting('max_open_positions', 3);
-  const freshSelectedRow = await refreshCandidateForExecution(selectedRow);
+ const freshSelectedRow = await refreshCandidateForExecution(selectedRow);
+
+  // --- start injection THE EXECUTION BUFFER GUARD (25% TOLERANCE) ---
+  let isApproved = freshSelectedRow.candidate.filters?.passed;
+  let currentFailures = freshSelectedRow.candidate.filters?.failures || [];
+
+  if (!isApproved) {
+    const mcapFailures = currentFailures.filter(f => f.toLowerCase().includes('market cap') && f.includes('>'));
+    const nonMcapFailures = currentFailures.filter(f => !(f.toLowerCase().includes('market cap') && f.includes('>')));
+
+    if (mcapFailures.length > 0 && nonMcapFailures.length === 0) {
+      const oldMcap = Number(selectedRow.candidate.metrics?.marketCapUsd || selectedRow.candidate.metrics?.graduatedMarketCapUsd || 0);
+      const newMcap = Number(freshSelectedRow.candidate.metrics?.marketCapUsd || freshSelectedRow.candidate.metrics?.graduatedMarketCapUsd || 0);
+      
+      const maxAllowedMcap = oldMcap > 0 ? oldMcap * 1.25 : 60000 * 1.25; 
+
+      if (newMcap > 0 && newMcap <= maxAllowedMcap) {
+        isApproved = true; // OVERRIDE! Kita loloskan.
+        freshSelectedRow.candidate.filters.passed = true;
+        freshSelectedRow.candidate.filters.failures = []; // Bersihkan status error
+        console.log(`[Execution Buffer] Overriding MCap spike! Old: $${oldMcap.toFixed(0)}, New: $${newMcap.toFixed(0)}. Proceeding to BUY.`);
+      }
+    }
+  }
+  // --- end of injection execution buffer
+
   const executionRows = rows.map(row => row.id === freshSelectedRow.id ? freshSelectedRow : row);
-  if (!freshSelectedRow.candidate.filters?.passed) {
+  
+  if (!isApproved) { 
     updateCandidateStatus(freshSelectedRow.id, 'stale_rejected');
     logDecisionEvent({
       batchId,
