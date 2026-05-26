@@ -8,6 +8,7 @@ import { extractDevAddress, checkDevHolding } from '../enrichment/devWallet.js';
 import { gmgnLink } from '../format.js';
 import { computeFibonacci } from './fibonacci.js';
 import { fetchOHLC } from '../enrichment/fetchOHLC.js';
+import { db } from '../db/connection.js';
 
 function detectDexPaid({ gmgn, graduatedCoin, trendingToken, jupiterAsset }) {
   const values = [
@@ -139,6 +140,48 @@ export function filterCandidate(candidate) {
   const chartAthDistance = Number(candidate.chart?.distanceFromAthPercent);
   const dexPaidEnabled = boolSetting('dex_paid', false);
   const tokenAgeMs = Number(candidate.metrics.tokenAgeMs || 0);
+
+  //Cooldown guard
+  const cooldownMinutes = 30; 
+  const cooldownMs = cooldownMinutes * 60 * 1000;
+  const sinceMs = now() - cooldownMs;
+
+  try {
+    const recentLive = db.prepare(`SELECT id, status FROM positions WHERE mint = ? AND opened_at_ms > ?`).get(candidate.token.mint, sinceMs);
+    const recentDryRun = db.prepare(`SELECT id, status FROM dry_run_positions WHERE mint = ? AND opened_at_ms > ?`).get(candidate.token.mint, sinceMs);
+    const recentTrade = recentLive || recentDryRun;
+
+    if (recentTrade) {
+      failures.push(`cooldown: Recently traded (Status: ${recentTrade.status}) in the last ${cooldownMinutes}m. No revenge trading!`);
+    }
+  } catch (err) {
+    console.error("[Cooldown Guard Error]:", err.message);
+  }
+
+  // Phoenix -75%
+  const liquidityUsd = candidate.metrics.liquidityUsd || 0;
+  const vol5m = candidate.metrics.trendingVolumeUsd || candidate.metrics.graduatedVolumeUsd || 0;
+  const dipPercent = candidate.chart?.distanceFromAthPercent || 0; 
+  
+  const isPhoenix = dipPercent <= -75 && dipPercent >= -98; 
+
+  const minLiq = isPhoenix ? 5000 : numSetting('liquidity_min', 15000); 
+  const minVol5m = numSetting('volume_5m_min', 2000);
+  const strictMinMcap = isPhoenix ? 5000 : numSetting('strict_mcap_min', 25000);
+  const strictMaxMcap = numSetting('strict_mcap_max', 65000);
+
+  if (minLiq > 0 && (!Number.isFinite(liquidityUsd) || liquidityUsd < minLiq)) {
+    failures.push(`liquidity: $${liquidityUsd.toFixed(0)} < min $${minLiq} (Phoenix: ${isPhoenix})`);
+  }
+  if (minVol5m > 0 && vol5m < minVol5m) {
+    failures.push(`volume 5m: $${vol5m.toFixed(0)} < min $${minVol5m}`);
+  }
+  if (strictMinMcap > 0 && (!Number.isFinite(mcap) || mcap < strictMinMcap)) {
+    failures.push(`strict market cap: $${mcap.toFixed(0)} < min $${strictMinMcap} (Phoenix: ${isPhoenix})`);
+  }
+  if (strictMaxMcap > 0 && Number.isFinite(mcap) && mcap > strictMaxMcap) {
+    failures.push(`strict market cap: $${mcap.toFixed(0)} > max $${strictMaxMcap}`);
+  }
 
   // Wallet-signal routes (smart_wallet_buy / kol_buy) bypass fee requirement
   const isWalletSignal = candidate.walletSignal != null ||

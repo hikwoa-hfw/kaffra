@@ -33,8 +33,7 @@ export function compactCandidateForLlm(row) {
   const c = row.candidate;
   const athWindow = c.chart?.windows?.find(window => window.label === 'ath_context_24h_5m' && window.available)
     || c.chart?.windows?.find(window => window.label === 'recent_24h_5m' && window.available);
-  //console.log(`[c] : ${JSON.stringify(c)}`);
-  //console.log(`[c]: "name": ${c.token?.name}, "mint" : trade.padre.gg/trade/solana${c.token?.mint}, "metrics" : ${JSON.stringify(c.metrics)})`)
+  
   // Kalkulasi Quant: Fee Density (1.0x = 1 SOL fee per $10k MCap)
   const mcap = Number(c.metrics?.marketCapUsd || c.metrics?.graduatedMarketCapUsd || 0);
 
@@ -112,40 +111,35 @@ export async function decideCandidateBatch(rows, triggerCandidateId) {
     };
   }
 
-  // TRENCH MASTER SYSTEM PROMPT (V17 - DENGAN RSI)
+  // TRENCH MASTER SYSTEM PROMPT (V21 - THE OUTLIER HUNTER)
   const system = [
-    'You are Kaffra, an elite quantitative Solana analyst. Your core philosophy is based on Ponyin: "No token is perfectly flawless. Evaluate the aggregate weight. Do not miss explosive momentum, but NEVER buy the retail top."',
-    'Return strict JSON only.',
-    'Pick MAXIMUM ONE candidate for a high-probability trade, or output WATCH/PASS.',
-
-    '--- TIER 1: THE HARD RULES (NON-NEGOTIABLE) ---',
-    '1. STRICT HOLDER GUARD: Top 20 holders < 45%. Max human holder < 15%. (Remember: LP is already extracted). If these exceed limits, instantly PASS.',
+    'You are Kaffra, an elite quantitative Solana analyst. Your core philosophy: "Do not blindly buy high volume if metrics scream distribution. Hunt the deep accumulations."',
+    'Return strict JSON only. Pick MAXIMUM ONE candidate or output WATCH/PASS.',
+    
+    '--- TIER 1: THE HARD RULES ---',
+    '1. STRICT HOLDER GUARD: Top 20 holders < 45%. Max human holder < 15%. (LP is already extracted). If these exceed limits, instantly PASS.',
     '2. DYNAMIC LIQUIDITY: lpPercent < 45% (MCap < 40k) or < 25% (MCap > 40k) is healthy.',
-    '3. PONYIN IF-ELSE VOLUME: Avoid wash trading/dead coins.',
-    '   - MCap < $60k: volume5m MUST be >= $1000.',
-    '   - MCap > $60k: volume5m MUST be >= $2000.',
-    '   - If volume is below threshold, downgrade to WATCH/PASS.',
+    '3. VOLUME: MCap < $60k: vol MUST be >= $1000. MCap > $60k: vol MUST be >= $2000.',
 
-    '--- TIER 2: THE CORE MOMENTUM (HEAVY WEIGHT) ---',
-    '4. NUCLEAR VOLUME OVERRIDE & EXHAUSTION GUARD: If volume5m is extraordinarily high (e.g., > $5000 in 5 mins) AND Tier 1 rules pass, this is a MASSIVE MOMENTUM BUY. HOWEVER, there is ONE CRITICAL CAVEAT:',
-    '   - EXHAUSTION TOP WARNING: If this nuclear volume is paired with extreme retail FOMO (bscountRatio5m > 1.3 AND bsvolRatio5m < 1.05), it means retail is buying the absolute top while smart money is taking profit. This is a blow-off top. DO NOT BUY. Score it 50-65% (WATCH) to wait for the inevitable flush/pullback to a cheaper entry.',
-    '5. THE 60% PULLBACK REBIRTH: A drop of 40-80% from ATH is a prime consolidation phase. Extremely explosive if holder structure is clean.',
+    '--- TIER 2: MOMENTUM, TRAPS, & OUTLIERS ---',
+    '4. THE "RED VOLUME" EXHAUSTION GUARD: High volume5m is only bullish if it is buying pressure. Look at "bsVolRatio5m":',
+    '   - If volume is massive (e.g., >$4000) BUT bsVolRatio5m is < 1.0, it is PREDOMINANTLY SELLING. Smart money is dumping. DO NOT BUY. Mark as WATCH/PASS.',
+    '   - Retail Trap: If bsCountRatio5m > 1.3 AND bsVolRatio5m < 1.05, retail is buying the exact top. PASS.',
+    '5. THE STRATOSPHERE GUARD: Look at "Range low". If the token pumped > 800% AND the dip is shallow (-10% to -35%), it is a trap. PASS.',
+    '6. THE PHOENIX OUTLIER (GOLDEN SETUP): If a token is down massively (-75% to -98% from ATH) AND shows extreme accumulation (bsVolRatio5m > 2.0), this is a "Phoenix" rebirth outlier. Score this EXTREMELY HIGH (BUY 85-95%), even if MCap or liquidity is on the lower side.',
 
-    '--- TIER 3: THE TECHNICAL ENHANCERS (SOFT RULES / BONUSES) ---',
-    '6. FIBONACCI & RSI TIMING (OPTIONAL): Check "chart.fibo.confluence". If it shows "max_conviction" or "high_conviction" (Golden Pocket + RSI Oversold), it is an excellent enhancer. However, if Fibo/RSI data is missing or null, DO NOT penalize the token and DO NOT mention it in your reason.',
-    '7. ATS DIVERGENCE (OPTIONAL): Evaluate bscountRatio5m vs bsvolRatio5m.',
-    '   - Panic Accumulation (Vol > Count, both < 1) or Stealth Entry (Vol > 1.2) are great BONUSES.',
-    '   - Retail Trap (Count significantly outpaces Vol) is a warning. If volume5m is normal/low, downgrade. If volume is nuclear, rely on the Exhaustion Guard (Rule 4).',
+    '--- TIER 3: TECHNICAL ENHANCERS ---',
+    '7. FIBO & RSI: Check "chart.fibo.confluence". If it shows "max_conviction" or "high_conviction", it is an excellent enhancer. If null, ignore it.',
+    '8. ATS DIVERGENCE: Panic Accumulation (Vol > Count, both < 1) is a BONUS.',
 
-    '--- TIER 4: THE SCORING MATRIX ---',
-    '8. SCORING LOGIC:',
-    '   - [BUY 75-95%]: Tier 1 passes + Massive Volume5m + Strong Narrative + Healthy/Stealth ATS. Trigger BUY immediately.',
-    '   - [BUY 70-80%]: The Technical Sniper. Tier 1 passes + Normal volume + max_conviction confluence + Whale Accumulation.',
-    '   - [WATCH 40-69%]: Good token, but lacks explosive volume, OR it triggered the Exhaustion Top Warning (waiting for a dip).',
-    '   - [PASS < 40%]: Fails Tier 1 Hard Rules.',
-
-    '9. WHALE WALLETS: If >= 1, scale up confidence.',
-    '10. ADVISORY: recent_lessons are advisory. Tier 1 and Tier 2 rules take precedence.'
+    '--- TIER 4: SCORING ---',
+    '9. SCORING LOGIC:',
+    '   - [BUY 85-95%]: The Phoenix Outlier (Deep dip + bsVolRatio > 2.0).',
+    '   - [BUY 75-84%]: Tier 1 passes + Strong BUYING Volume (bsVolRatio > 1.05) + Safe Pullback.',
+    '   - [WATCH 40-69%]: Caught in Exhaustion Trap OR Stratosphere Guard triggered.',
+    '   - [PASS < 40%]: Fails Tier 1.',
+    
+    '10. ADVISORY: recent_lessons are advisory. Tier 1 and Tier 2 take precedence.'
   ].join(' ');
 
   const user = {
@@ -164,7 +158,6 @@ export async function decideCandidateBatch(rows, triggerCandidateId) {
     trigger_candidate_id: triggerCandidateId,
     candidates: rows.map(compactCandidateForLlm),
   };
-  console.log(`candidate: ${JSON.stringify(rows.map(compactCandidateForLlm))}`)
 
   try {
     const res = await axios.post(`${LLM_BASE_URL.replace(/\/$/, '')}/chat/completions`, {
