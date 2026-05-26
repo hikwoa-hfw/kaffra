@@ -147,7 +147,7 @@ export function filterCandidate(candidate) {
   const sinceMs = now() - cooldownMs;
 
   try {
-    const recentLive = db.prepare(`SELECT id, status FROM positions WHERE mint = ? AND opened_at_ms > ?`).get(candidate.token.mint, sinceMs);
+    const recentLive = db.prepare(`SELECT id, status FROM dry_run_positions WHERE mint = ? AND opened_at_ms > ? AND status = 'live'`).get(candidate.token.mint, sinceMs);
     const recentDryRun = db.prepare(`SELECT id, status FROM dry_run_positions WHERE mint = ? AND opened_at_ms > ?`).get(candidate.token.mint, sinceMs);
     const recentTrade = recentLive || recentDryRun;
 
@@ -161,14 +161,12 @@ export function filterCandidate(candidate) {
   // Phoenix -75%
   const liquidityUsd = candidate.metrics.liquidityUsd || 0;
   const vol5m = candidate.metrics.trendingVolumeUsd || candidate.metrics.graduatedVolumeUsd || 0;
-  const dipPercent = candidate.chart?.distanceFromAthPercent || 0; 
-  
+  const dipPercent = candidate.chart?.distanceFromAthPercent || 0;
   const isPhoenix = dipPercent <= -75 && dipPercent >= -98; 
-
-  const minLiq = isPhoenix ? 5000 : numSetting('liquidity_min', 15000); 
-  const minVol5m = numSetting('volume_5m_min', 2000);
-  const strictMinMcap = isPhoenix ? 5000 : numSetting('strict_mcap_min', 25000);
-  const strictMaxMcap = numSetting('strict_mcap_max', 65000);
+  const minLiq = isPhoenix ? 4000 : numSetting('liquidity_min', 10000); 
+  const minVol5m = numSetting('volume_5m_min', 1000);
+  const strictMinMcap = isPhoenix ? 4000 : numSetting('strict_mcap_min', 15000);
+  const strictMaxMcap = numSetting('strict_mcap_max', 80000);
 
   if (minLiq > 0 && (!Number.isFinite(liquidityUsd) || liquidityUsd < minLiq)) {
     failures.push(`liquidity: $${liquidityUsd.toFixed(0)} < min $${minLiq} (Phoenix: ${isPhoenix})`);
@@ -181,6 +179,22 @@ export function filterCandidate(candidate) {
   }
   if (strictMaxMcap > 0 && Number.isFinite(mcap) && mcap > strictMaxMcap) {
     failures.push(`strict market cap: $${mcap.toFixed(0)} > max $${strictMaxMcap}`);
+  }
+
+  //stratosphere strat
+  const rangeLow = candidate.chart?.rangeLowPercent || 0; 
+  const dipFromAth = candidate.chart?.distanceFromAthPercent || 0; 
+  const bsVolRatio = candidate.metrics?.bsVolRatio5m || 1; // Default to 1 if missing
+
+  // If token is in the stratosphere (pumped >800% with shallow dip)...
+  if (rangeLow >= 800 && dipFromAth >= -35 && dipFromAth <= 0) {
+    // EXCEPTION: If buying volume is extremely aggressive (> 1.5x selling volume), 
+    // it indicates a potential Parabolic Breakout. We let it pass to the LLM.
+    if (bsVolRatio >= 1.5) {
+      console.log(`[Bypass] Stratosphere allowed due to extreme momentum (bsVolRatio: ${bsVolRatio.toFixed(2)})`);
+    } else {
+      failures.push(`stratosphere trap: Pumped +${rangeLow.toFixed(0)}% (Dip ${dipFromAth.toFixed(1)}%). VolRatio ${bsVolRatio.toFixed(2)} is too weak for a breakout. Danger of exit liquidity.`);
+    }
   }
 
   // Wallet-signal routes (smart_wallet_buy / kol_buy) bypass fee requirement

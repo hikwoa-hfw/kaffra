@@ -1,103 +1,78 @@
 import { db } from './src/db/connection.js';
 import { now } from './src/utils.js';
 
-// --- DATA KOIN BRUME ---
+// --- BRUME TOKEN DATA ---
 const tokenMint = 'ChtH5GxPAWqFXLYuhrqy82viuMxeWBsvJXcCahT7pump';
-const tokenName = 'Brume';
-const entryMcapUsd = 61900; // Masuk di MCap $61.9K
-const peakMcapUsd = 450000; // Puncak di MCap $450K
-const trailingPercent = 15; // Trailing -15% (sesuai setting kita)
+const tokenSymbol = 'BRUME';
+const entryMcapUsd = 61900;
+const peakMcapUsd = 450000;
+const trailingPercent = 15;
 
-// --- KALKULASI QUANTITATIF ---
-// Harga Keluar = Harga Puncak dikurangi persentase Trailing (15%)
-const exitMcapUsd = peakMcapUsd - (peakMcapUsd * (trailingPercent / 100)); // $382,500
-// Profit Terealisasi = (Harga Keluar - Harga Masuk) / Harga Masuk
+// --- QUANT MATH ---
+// Calculate exit mcap based on the trailing drop from the peak
+const exitMcapUsd = peakMcapUsd - (peakMcapUsd * (trailingPercent / 100));
 const realizedPercent = ((exitMcapUsd - entryMcapUsd) / entryMcapUsd) * 100;
-// Peak Percent = (Harga Puncak - Harga Masuk) / Harga Masuk
 const peakPercent = ((peakMcapUsd - entryMcapUsd) / entryMcapUsd) * 100;
 
-// Ukuran modal masuk (Standar 0.1 SOL)
+// Standard size and estimated profit
 const entrySizeSol = 0.1;
-// Estimasi SOL Profit (Asumsi PnL persentase setara dengan PnL SOL)
 const realizedSol = entrySizeSol * (realizedPercent / 100);
 
 const currentTime = now();
-// Asumsi trade terjadi sekitar 20 menit (1.200.000 ms)
-const openedAt = currentTime - 1200000; 
+const openedAt = currentTime - (20 * 60 * 1000); // Backdate open time by 20 mins
 const closedAt = currentTime;
 
 console.log(`=== INJECTING BRUME OUTLIER TRADE ===`);
 console.log(`Peak: $${peakMcapUsd} (+${peakPercent.toFixed(1)}%)`);
 console.log(`Exit: $${exitMcapUsd} (+${realizedPercent.toFixed(1)}%)`);
-console.log(`Estimated Profit: +${realizedSol.toFixed(4)} SOL`);
+console.log(`Est Profit: +${realizedSol.toFixed(4)} SOL`);
 
 try {
-  // 1. INJEKSI KE TABEL DECISIONS (Agar LLM History ingat)
+  // 1. Inject the LLM decision so the bot remembers the reasoning
   const stmtDecision = db.prepare(`
-    INSERT INTO decision_logs (
-      mint, name, timestamp_ms, decision_type,
-      confidence, score, reason, snapshot_json
+    INSERT INTO llm_decisions (
+      candidate_id, mint, created_at_ms, verdict,
+      confidence, reason, risks_json, raw_json
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  stmtDecision.run(
+  
+  const dummyCandidateId = 999999; // Dummy ID to avoid clashing with real candidates
+  
+  const decisionResult = stmtDecision.run(
+    dummyCandidateId,
     tokenMint,
-    tokenName,
     openedAt,
     'BUY',
-    82.0, // Confidence sesuai log LLM Anda
-    82,
+    82.0,
     "Tier1 passes. Volume5m 25605 satisfies volume rule. bsVolRatio5m 1.09 indicates buying pressure. Injected manual override.",
+    JSON.stringify([]),
     JSON.stringify({ injected: true, type: 'manual_override' })
   );
-  console.log('✅ Decision injected.');
+  
+  const llmDecisionId = decisionResult.lastInsertRowid;
+  console.log('✅ llm_decisions injected.');
 
-  // 2. INJEKSI KE TABEL POSITIONS (Live Trades)
-  const stmtLive = db.prepare(`
-    INSERT INTO positions (
-      mint, name, strategy, mode,
-      entry_mcap_usd, entry_size_sol, entry_price_native, 
-      tp_percent, sl_percent, trail_percent,
-      status, peak_percent, max_mcap_usd,
-      realized_pnl_percent, realized_pnl_sol,
-      exit_mcap_usd, exit_price_native, exit_reason,
-      opened_at_ms, closed_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  stmtLive.run(
-    tokenMint, tokenName, 'degen', 'live',
-    entryMcapUsd, entrySizeSol, 0.000001, // Mock entry price
-    30.0, -35.0, trailingPercent,
-    'closed', peakPercent, peakMcapUsd,
-    realizedPercent, realizedSol,
-    exitMcapUsd, 0.000006, 'TRAILING_TP', // Mock exit price
-    openedAt, closedAt
-  );
-  console.log('✅ Live Position injected.');
-
-  // 3. INJEKSI KE TABEL DRY_RUN_POSITIONS (Dry Run Trades - agar laporan nyambung)
-  const stmtDry = db.prepare(`
+  // 2. Inject the actual position into dry_run_positions (flagged as 'live' execution)
+  const stmtPosition = db.prepare(`
     INSERT INTO dry_run_positions (
-      mint, name, strategy, mode,
-      entry_mcap_usd, entry_size_sol, entry_price_native, 
-      tp_percent, sl_percent, trail_percent,
-      status, peak_percent, max_mcap_usd,
-      realized_pnl_percent, realized_pnl_sol,
-      exit_mcap_usd, exit_price_native, exit_reason,
-      opened_at_ms, closed_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      candidate_id, mint, symbol, status, opened_at_ms, closed_at_ms,
+      size_sol, entry_price, entry_mcap, tp_percent, sl_percent,
+      trailing_enabled, trailing_percent, trailing_armed,
+      exit_price, exit_mcap, exit_reason, pnl_percent, pnl_sol,
+      llm_decision_id, execution_mode, snapshot_json, strategy_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  stmtDry.run(
-    tokenMint, tokenName, 'degen', 'dry_run',
-    entryMcapUsd, entrySizeSol, 0.000001, 
-    30.0, -35.0, trailingPercent,
-    'closed', peakPercent, peakMcapUsd,
-    realizedPercent, realizedSol,
-    exitMcapUsd, 0.000006, 'TRAILING_TP',
-    openedAt, closedAt
+  
+  stmtPosition.run(
+    dummyCandidateId, tokenMint, tokenSymbol, 'closed', openedAt, closedAt,
+    entrySizeSol, 0.000001, entryMcapUsd, 30.0, -35.0, // Base TP/SL limits
+    1, trailingPercent, 1, // trailing_enabled = 1, trailing_armed = 1
+    0.000006, exitMcapUsd, 'TRAILING_TP', realizedPercent, realizedSol,
+    llmDecisionId, 'live', JSON.stringify({ injected: true }), 'degen'
   );
-  console.log('✅ Dry-Run Position injected.');
+  console.log('✅ dry_run_positions injected (Live Mode).');
 
-  console.log(`\n🎉 Injeksi Sukses! Brume sekarang ada di database Anda.`);
+  console.log(`\n🎉 Injection Successful! Brume outlier is now in the DB.`);
 } catch (error) {
-  console.error("❌ Gagal menginjeksi:", error.message);
+  console.error("❌ Injection failed:", error.message);
 }
