@@ -102,9 +102,10 @@ export function createDryRunPosition(candidateId, candidate, decision, reason = 
     const result = db.prepare(`
       INSERT INTO dry_run_positions (
         candidate_id, mint, symbol, status, opened_at_ms, size_sol, entry_price, entry_mcap,
-        token_amount_est, high_water_price, high_water_mcap, tp_percent, sl_percent,
-        trailing_enabled, trailing_percent, trailing_armed, llm_decision_id, strategy_id, snapshot_json
-      ) VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+        token_amount_est, high_water_price, high_water_mcap, low_water_price, low_water_mcap,
+        tp_percent, sl_percent, trailing_enabled, trailing_percent, trailing_armed,
+        llm_decision_id, strategy_id, snapshot_json
+      ) VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
     `).run(
       candidateId,
       candidate.token.mint,
@@ -114,6 +115,8 @@ export function createDryRunPosition(candidateId, candidate, decision, reason = 
       entryPrice,
       entryMcap,
       null,
+      entryPrice,
+      entryMcap,
       entryPrice,
       entryMcap,
       tp,
@@ -156,10 +159,10 @@ export function createLivePosition(candidateId, candidate, decision, swap, reaso
     const result = db.prepare(`
       INSERT INTO dry_run_positions (
         candidate_id, mint, symbol, status, opened_at_ms, size_sol, entry_price, entry_mcap,
-        token_amount_est, high_water_price, high_water_mcap, tp_percent, sl_percent,
-        trailing_enabled, trailing_percent, trailing_armed, llm_decision_id,
+        token_amount_est, high_water_price, high_water_mcap, low_water_price, low_water_mcap,
+        tp_percent, sl_percent, trailing_enabled, trailing_percent, trailing_armed, llm_decision_id,
         execution_mode, entry_signature, token_amount_raw, strategy_id, snapshot_json
-      ) VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'live', ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'live', ?, ?, ?, ?)
     `).run(
       candidateId,
       candidate.token.mint,
@@ -169,6 +172,8 @@ export function createLivePosition(candidateId, candidate, decision, swap, reaso
       entryPrice,
       entryMcap,
       null,
+      entryPrice,
+      entryMcap,
       entryPrice,
       entryMcap,
       tp,

@@ -163,6 +163,7 @@ export async function decideCandidateBatch(rows, triggerCandidateId) {
     const res = await axios.post(`${LLM_BASE_URL.replace(/\/$/, '')}/chat/completions`, {
       model: LLM_MODEL,
       temperature: 0.11,
+      stream: false,
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: JSON.stringify(user) },
@@ -184,7 +185,9 @@ export async function decideCandidateBatch(rows, triggerCandidateId) {
       selected_row: decision.verdict === 'BUY' && row ? row : null,
     };
   } catch (err) {
-    console.log(`[llm] batch failed: ${err.message}`);
+    const status = err.response?.status || 'N/A';
+    const detail = JSON.stringify(err.response?.data || {}).slice(0, 300);
+    console.log(`[llm] batch failed (${status}): ${err.message} | detail: ${detail}`);
     return {
       verdict: 'WATCH',
       confidence: 0,

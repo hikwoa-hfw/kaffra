@@ -116,6 +116,12 @@ export async function refreshPosition(position, { autoExit = true, jupiterPnl = 
   }
   const highWaterMcap = Math.max(Number(position.high_water_mcap || 0), Number(mcap));
   const highWaterPrice = Math.max(Number(position.high_water_price || 0), Number(price || 0));
+  const lowWaterMcap = position.low_water_mcap != null
+    ? Math.min(Number(position.low_water_mcap), Number(mcap))
+    : Number(mcap);
+  const lowWaterPrice = position.low_water_price != null
+    ? Math.min(Number(position.low_water_price), Number(price || 0))
+    : Number(price || 0);
   let pnlPercent = (Number(mcap) / Number(position.entry_mcap) - 1) * 100;
   let pnlSol = Number(position.size_sol) * pnlPercent / 100;
   if (jupiterPnl && Number.isFinite(Number(jupiterPnl.totalPnlPercentageNative))) {
@@ -190,9 +196,11 @@ export async function refreshPosition(position, { autoExit = true, jupiterPnl = 
 
   db.prepare(`
     UPDATE dry_run_positions
-    SET high_water_mcap = ?, high_water_price = ?, trailing_armed = ?
+    SET high_water_mcap = ?, high_water_price = ?, 
+        low_water_mcap = ?, low_water_price = ?,
+        trailing_armed = ?
     WHERE id = ?
-  `).run(highWaterMcap, highWaterPrice, trailingArmed ? 1 : 0, position.id);
+  `).run(highWaterMcap, highWaterPrice, lowWaterMcap, lowWaterPrice, trailingArmed ? 1 : 0, position.id);
 
   if (exitReason && autoExit && position.execution_mode === 'live') {
     if (sellInProgress.has(position.id)) return { ...position, exitReason: null };
@@ -242,6 +250,9 @@ export async function refreshPosition(position, { autoExit = true, jupiterPnl = 
     highWaterMcap,
     high_water_mcap: highWaterMcap,
     high_water_price: highWaterPrice,
+    lowWaterMcap,
+    low_water_mcap: lowWaterMcap,
+    low_water_price: lowWaterPrice,
     pnlPercent: finalPnlPercent,
     pnl_percent: finalPnlPercent,
     pnlSol: finalPnlSol,

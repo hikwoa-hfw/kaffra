@@ -8,6 +8,16 @@ node_modules/
 *.db-*
 *.log
 .DS_Store
+*.sql
 npm-debug.log*
 
 ARCHITECTURE.md
+
+# Database recovery artifacts
+recover-db.js
+import-recovered.js
+recovered-data-*.json
+backup_corrupt/
+*.sqlite.corrupt.backup
+*.sqlite.backup
+*.db.backup
