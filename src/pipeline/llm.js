@@ -163,7 +163,7 @@ export async function decideCandidateBatch(rows, triggerCandidateId) {
     const res = await axios.post(`${LLM_BASE_URL.replace(/\/$/, '')}/chat/completions`, {
       model: LLM_MODEL,
       temperature: 0.11,
-      stream: false,
+      // stream: false,
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: JSON.stringify(user) },
