@@ -1,4 +1,5 @@
 import { now, pruneSeen, log, logError } from '../utils.js';
+import { saveBuySnapshot } from '../db/snapshots.js';
 import { numSetting, boolSetting } from '../db/settings.js';
 import { upsertCandidate, updateCandidateStatus, recentEligibleCandidates, candidateById } from '../db/candidates.js';
 import { storeDecision, storeBatchDecision, logDecisionEvent } from '../db/decisions.js';
@@ -210,6 +211,7 @@ export async function handleApprovedBuy(selectedRow, decision, batchId, rows = [
   if (mode === 'dry_run') {
     try {
       const positionId = await createDryRunPosition(freshSelectedRow.id, freshSelectedRow.candidate, decision, `llm_batch_${batchId}`);
+      saveBuySnapshot(positionId, freshSelectedRow, decision, batchId, executionRows);
       logDecisionEvent({
         batchId,
         triggerCandidateId,

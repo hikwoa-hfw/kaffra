@@ -198,6 +198,19 @@ export function initDb() {
     CREATE INDEX IF NOT EXISTS idx_decision_logs_mint ON decision_logs(selected_mint);
     CREATE INDEX IF NOT EXISTS idx_signal_events_mint ON signal_events(mint);
     CREATE INDEX IF NOT EXISTS idx_learning_lessons_status ON learning_lessons(status, created_at_ms);
+    CREATE TABLE IF NOT EXISTS position_buy_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      position_id INTEGER NOT NULL UNIQUE,
+      candidate_id INTEGER,
+      batch_id INTEGER,
+      mint TEXT NOT NULL,
+      symbol TEXT,
+      created_at_ms INTEGER NOT NULL,
+      candidate_json TEXT NOT NULL,
+      decision_json TEXT NOT NULL,
+      batch_summary_json TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_buy_snapshots_position ON position_buy_snapshots(position_id);
   `);
   ensureColumn('candidates', 'signal_key', 'TEXT');
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_candidates_signal_key ON candidates(signal_key) WHERE signal_key IS NOT NULL');

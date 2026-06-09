@@ -9,6 +9,7 @@ import { createLivePosition, canOpenMorePositions, openPositionCount } from '../
 import { intentById } from '../db/intents.js';
 import { logDecisionEvent } from '../db/decisions.js';
 import { refreshCandidateForExecution } from './positions.js';
+import { saveBuySnapshot } from '../db/snapshots.js';
 import { bot } from '../telegram/bot.js';
 import { candidateSummary } from '../telegram/format.js';
 import { sendPositionOpen, sendTelegram } from '../telegram/send.js';
@@ -31,6 +32,7 @@ export async function executeLiveBuy(selectedRow, decision, batchId, rows = [], 
     swap.outputAmount = await fetchLiveTokenBalance(selectedRow.candidate.token.mint) || swap.outputAmount;
   }
   const positionId = createLivePosition(selectedRow.id, selectedRow.candidate, decision, swap, `live_batch_${batchId}`);
+  saveBuySnapshot(positionId, selectedRow, decision, batchId, rows);
   logDecisionEvent({
     batchId,
     triggerCandidateId,
@@ -93,6 +95,7 @@ export async function executeConfirmedIntent(chatId, intentId) {
       swap.outputAmount = await fetchLiveTokenBalance(freshRow.candidate.token.mint) || swap.outputAmount;
     }
     const positionId = createLivePosition(intent.candidate_id, freshRow.candidate, decision, swap, `confirmed_intent_${intentId}`);
+    saveBuySnapshot(positionId, freshRow, decision, null, [freshRow]);
     db.prepare('UPDATE trade_intents SET status = ?, updated_at_ms = ? WHERE id = ?').run('executed_live', now(), intentId);
     logDecisionEvent({
       batchId: null,

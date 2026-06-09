@@ -29,6 +29,7 @@ import { candidateSummary } from './format.js';
 import { candidateById, updateCandidateStatus } from '../db/candidates.js';
 import { storeDecision, logDecisionEvent } from '../db/decisions.js';
 import { createDryRunPosition, canOpenMorePositions, openPositionCount, tradingMode } from '../db/positions.js';
+import { saveBuySnapshot } from '../db/snapshots.js';
 import { executeLiveBuy, executeConfirmedIntent, rejectIntent } from '../execution/router.js';
 import { sendCandidate, sendPosition, closePosition, updatePositionRule, toggleTrailing, sendPnl } from './commands.js';
 import { requestNumericFilterInput, requestStrategyNumericInput } from './input.js';
@@ -183,6 +184,7 @@ export async function handleCallback(query) {
       return;
     }
     const positionId = await createDryRunPosition(row.id, candidate, decision, 'manual_buy');
+    saveBuySnapshot(positionId, row, decision, 'manual', [row]);
     logDecisionEvent({
       batchId: 'manual',
       triggerCandidateId: row.id,

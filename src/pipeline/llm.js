@@ -153,7 +153,7 @@ export async function decideCandidateBatch(rows, triggerCandidateId) {
       reason: 'Strict trench analysis explaining WHY it is a gem or a trap. Justify using Volume, Holders, and ATS Divergence. Do NOT mention Fibo or RSI if the data is missing or unavailable. Avoid using double quotes inside this text.',
       risks: ['Risk 1', 'Risk 2', 'Risk 3'],
       suggested_tp_percent: 'positive number (e.g., 10 to 50)',
-      suggested_sl_percent: '-35',
+      suggested_sl_percent: '-15',
     },
     trigger_candidate_id: triggerCandidateId,
     candidates: rows.map(compactCandidateForLlm),
