@@ -451,7 +451,7 @@ export function initDb() {
     partial_tp_at_percent: 0,
     partial_tp_sell_percent: 0,
     max_hold_ms: 0,
-    use_llm: false,
+    use_llm: true,
     llm_min_confidence: 0,
     profit_lock_enabled: false,
     profit_lock_trigger_1_percent: 15,

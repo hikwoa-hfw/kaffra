@@ -186,6 +186,7 @@ async function fetchJupiterChartContext(mint) {
   const available = results.filter(row => row.available);
   const currentNative = available[0]?.current ?? null;
   const rangeHigh = available.length ? Math.max(...available.map(row => Number(row.high || 0))) : null;
+  const rangeLow = available.length ? Math.min(...available.map(row => Number(row.low || Infinity))) : null;
   const topBlastRisk = Number.isFinite(Number(currentNative)) && Number.isFinite(Number(rangeHigh)) && rangeHigh > 0
     ? currentNative / rangeHigh >= 0.85
     : null;
@@ -194,6 +195,10 @@ async function fetchJupiterChartContext(mint) {
     purpose: 'ATH/range context, not momentum scoring',
     currentNative,
     rangeHighNative: rangeHigh,
+    rangeLowNative: Number.isFinite(rangeLow) && rangeLow !== Infinity ? rangeLow : null,
+    rangeLowPercent: rangeLow !== null && Number.isFinite(rangeLow) && rangeLow > 0 && Number.isFinite(Number(rangeHigh)) && rangeHigh > 0
+      ? parseFloat(((rangeHigh / rangeLow - 1) * 100).toFixed(2))
+      : null,
     belowRangeHighPercent: currentNative && rangeHigh ? (currentNative / rangeHigh - 1) * 100 : null,
     distanceFromAthPercent: currentNative && rangeHigh ? (currentNative / rangeHigh - 1) * 100 : null,
     topBlastRisk,

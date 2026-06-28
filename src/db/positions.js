@@ -36,6 +36,15 @@ export function tradingMode() {
   return ['dry_run', 'confirm', 'live'].includes(mode) ? mode : 'dry_run';
 }
 
+// Confidence-based size multiplier
+function confidenceSizeMultiplier(decision) {
+  const confidence = Number(decision?.confidence ?? 0);
+  if (confidence >= 85) return 1.0;
+  if (confidence >= 70) return 0.7;
+  if (confidence >= 50) return 0.4;
+  return 0.2;
+}
+
 export function allPositions(limit = 10) {
   return db.prepare('SELECT * FROM dry_run_positions ORDER BY id DESC LIMIT ?').all(limit);
 }
@@ -85,7 +94,7 @@ export function pnlByStrategy({ mode = 'all', windowMs = 0 } = {}) {
 
 export function createDryRunPosition(candidateId, candidate, decision, reason = 'llm_buy') {
   const strat = activeStrategy();
-  const sizeSol = strat.position_size_sol ?? numSetting('dry_run_buy_sol', 0.1);
+  const sizeSol = (strat.position_size_sol ?? numSetting('dry_run_buy_sol', 0.1)) * confidenceSizeMultiplier(decision);
   const entryPrice = Number(candidate.metrics.priceUsd || 0) || null;
   const entryMcap = Number(candidate.metrics.marketCapUsd || candidate.metrics.graduatedMarketCapUsd || 0) || null;
   const tp = strat.profit_lock_enabled ? 999999 : Number(decision.suggested_tp_percent || strat.tp_percent || numSetting('default_tp_percent', 50));
@@ -142,7 +151,7 @@ export function createDryRunPosition(candidateId, candidate, decision, reason = 
 
 export function createLivePosition(candidateId, candidate, decision, swap, reason = 'live_buy') {
   const strat = activeStrategy();
-  const sizeSol = strat.position_size_sol ?? numSetting('dry_run_buy_sol', 0.1);
+  const sizeSol = (strat.position_size_sol ?? numSetting('dry_run_buy_sol', 0.1)) * confidenceSizeMultiplier(decision);
   const entryPrice = Number(candidate.metrics.priceUsd || 0) || null;
   const entryMcap = Number(candidate.metrics.marketCapUsd || candidate.metrics.graduatedMarketCapUsd || 0) || null;
   const tp = strat.profit_lock_enabled ? 999999 : Number(decision.suggested_tp_percent || strat.tp_percent || numSetting('default_tp_percent', 50));

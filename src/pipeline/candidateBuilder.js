@@ -157,29 +157,52 @@ export function filterCandidate(candidate) {
   } catch (err) {
     console.error("[Cooldown Guard Error]:", err.message);
   }
+  // ────────────────────────────────────────────────────────────────────
+  // NOTE [LLM-only filters]: These are now soft/advisory — passed to LLM
+  // via compactCandidateForLlm for LLM to evaluate. Strategy config
+  // (min_mcap_usd / max_mcap_usd / trending_min_volume_usd) still applies.
+  // ────────────────────────────────────────────────────────────────────
+  // Previously blocked before LLM (commented out to let LLM decide):
+  //   - strictMinMcap / strictMaxMcap (hardcoded 15k-80k)
+  //   - volume_5m_min (hardcoded $1000)
+  //   - liquidity_min (relaxed from 10k → 1k, just a sanity floor)
+  //   - topBlastRisk (moved to LLM prompt as advisory)
+  //   - fee distribution check (moved to LLM prompt as advisory)
+  //
+  // Hard block filters that remain active:
+  //   - Strategy config: min_mcap_usd / max_mcap_usd
+  //   - Strategy config: trending_min_volume_usd / trending_min_swaps
+  //   - Strategy config: max_top20_holder_percent / min_trench_score
+  //   - Strategy config: trending_max_rug_ratio / trending_max_bundler_rate
+  //   - Cooldown guard (30m)
+  //   - Blast shield (stratozone: pump >800%, shallow dip)
+  // ────────────────────────────────────────────────────────────────────
 
   // Phoenix -75%
   const liquidityUsd = candidate.metrics.liquidityUsd || 0;
   const vol5m = candidate.metrics.trendingVolumeUsd || candidate.metrics.graduatedVolumeUsd || 0;
   const dipPercent = candidate.chart?.distanceFromAthPercent || 0;
-  const isPhoenix = dipPercent <= -75 && dipPercent >= -98; 
-  const minLiq = isPhoenix ? 4000 : numSetting('liquidity_min', 10000); 
-  const minVol5m = numSetting('volume_5m_min', 1000);
-  const strictMinMcap = isPhoenix ? 4000 : numSetting('strict_mcap_min', 15000);
-  const strictMaxMcap = numSetting('strict_mcap_max', 80000);
+  const isPhoenix = dipPercent <= -75 && dipPercent >= -98;
+  // Relaxed liquidity floor: sanity check so we don't trade dead pools
+  const minLiq = isPhoenix ? 4000 : numSetting('liquidity_min', 1000);
 
   if (minLiq > 0 && (!Number.isFinite(liquidityUsd) || liquidityUsd < minLiq)) {
     failures.push(`liquidity: $${liquidityUsd.toFixed(0)} < min $${minLiq} (Phoenix: ${isPhoenix})`);
   }
-  if (minVol5m > 0 && vol5m < minVol5m) {
-    failures.push(`volume 5m: $${vol5m.toFixed(0)} < min $${minVol5m}`);
-  }
-  if (strictMinMcap > 0 && (!Number.isFinite(mcap) || mcap < strictMinMcap)) {
-    failures.push(`strict market cap: $${mcap.toFixed(0)} < min $${strictMinMcap} (Phoenix: ${isPhoenix})`);
-  }
-  if (strictMaxMcap > 0 && Number.isFinite(mcap) && mcap > strictMaxMcap) {
-    failures.push(`strict market cap: $${mcap.toFixed(0)} > max $${strictMaxMcap}`);
-  }
+  // [LLM] volume_5m_min — moved to LLM advisory via compactCandidateForLlm
+  // const minVol5m = numSetting('volume_5m_min', 1000);
+  // if (minVol5m > 0 && vol5m < minVol5m) {
+  //   failures.push(`volume 5m: $${vol5m.toFixed(0)} < min $${minVol5m}`);
+  // }
+  // [LLM] strictMinMcap / strictMaxMcap — moved to LLM, strategy config handles it
+  // const strictMinMcap = isPhoenix ? 4000 : numSetting('strict_mcap_min', 15000);
+  // const strictMaxMcap = numSetting('strict_mcap_max', 80000);
+  // if (strictMinMcap > 0 && (!Number.isFinite(mcap) || mcap < strictMinMcap)) {
+  //   failures.push(`strict market cap: $${mcap.toFixed(0)} < min $${strictMinMcap} (Phoenix: ${isPhoenix})`);
+  // }
+  // if (strictMaxMcap > 0 && Number.isFinite(mcap) && mcap > strictMaxMcap) {
+  //   failures.push(`strict market cap: $${mcap.toFixed(0)} > max $${strictMaxMcap}`);
+  // }
 
   //stratosphere strat
   const rangeLow = candidate.chart?.rangeLowPercent || 0; 
@@ -326,10 +349,26 @@ export function filterCandidate(candidate) {
       failures.push(`buy/sell ratio: ${buySellRatio.toFixed(2)} < ${strat.min_buy_sell_ratio}`);
     }
   }
-
   if (dexPaidEnabled && !candidate.metrics.dexPaid) {
     failures.push('dex paid: required but token is not flagged as paid');
   }
+  // topBlastRisk — moved to LLM advisory. Data passed via compactCandidateForLlm
+  // (candidate.chart.topBlastRisk). LLM decides.
+  // if (candidate.chart?.topBlastRisk === true) {
+  //   failures.push('top blast risk: price within 85% of 24h range high, likely to face selling pressure');
+  // }
+  // Fee distribution check — moved to LLM advisory. feeClaim + devWallet passed
+  // to LLM via compactCandidateForLlm. LLM decides when it's a red flag.
+  // const feeRecipients = candidate.feeClaim?.recipients || [];
+  // if (feeRecipients.length > 0 && candidate.devWallet) {
+  //   const devAddress = candidate.devWallet.address;
+  //   const devFeeShare = devAddress
+  //     ? feeRecipients.filter(r => r.address === devAddress).reduce((sum, r) => sum + r.percent, 0)
+  //     : 0;
+  //   if (devFeeShare > 50 && !candidate.devWallet.isHolding) {
+  //     failures.push(`fee distribution: dev gets ${devFeeShare.toFixed(1)}% of fees but holds 0% of supply`);
+  //   }
+  // }
 
   const trenchScore = candidate.metrics.trenchScore ?? 0;
   const minTrenchScore = strat.min_trench_score ?? 0;

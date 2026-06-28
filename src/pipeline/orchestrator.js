@@ -116,6 +116,29 @@ async function _processCandidateFromSignals(signals) {
   const confidenceThreshold = Number.isFinite(configuredConfidenceThreshold) ? configuredConfidenceThreshold : 75;
   const maxOpenPositions = strat.max_open_positions ?? numSetting('max_open_positions', 3);
 
+  // --- ENTRY TIMING GATE ---
+  const entryGateFailures = [];
+  if (selectedRow) {
+    const c = selectedRow.candidate;
+    // 1. Momentum trend check
+    const mt = c.metrics?.momentum_trend;
+    if (mt === 'distributing') {
+      entryGateFailures.push(`momentum: distributing (buy vol declining across 1m/5m/1h, selling pressure increasing)`);
+    } else if (mt === 'fading') {
+      entryGateFailures.push(`momentum: fading (recent 1m buying weakening vs 5m, momentum dying)`);
+    }
+    // 2. bsVolRatio5m check (even if LLM said BUY, double-check)
+    const bsr5 = c.metrics?.bsVolRatio5m;
+    if (bsr5 != null && bsr5 < 1.0) {
+      entryGateFailures.push(`bsVolRatio5m: ${bsr5.toFixed(2)} (sell volume > buy volume, entry likely at distribution top)`);
+    }
+    // 3. Price position in 24h range
+    const bhp = c.chart?.belowRangeHighPercent;
+    if (bhp != null && bhp > -20) {
+      entryGateFailures.push(`price position: ${bhp.toFixed(1)}% below range high (within top 20% of range, exit liquidity risk)`);
+    }
+  }
+
   if (selectedRow && agentEnabled && batchDecision.verdict === 'BUY' && batchDecision.confidence >= confidenceThreshold) {
     if (!canOpenMorePositions()) {
       log('agent', `max open positions reached (${openPositionCount()}/${maxOpenPositions}), skipping buy ${selectedRow.candidate.token.mint}`);
@@ -130,6 +153,21 @@ async function _processCandidateFromSignals(signals) {
       });
       return;
     }
+
+    // Log entry gate warnings but still allow buy (gate is advisory, not hard block)
+    if (entryGateFailures.length > 0) {
+      log('agent', `⚠️ Entry gate warnings for ${selectedRow.candidate.token.mint.slice(0, 8)}: ${entryGateFailures.join('; ')}`);
+      logDecisionEvent({
+        batchId,
+        triggerCandidateId: candidateId,
+        selectedRow,
+        rows,
+        decision: batchDecision,
+        action: 'entry_proceed_with_gate_warnings',
+        guardrails: { entryGateFailures, maxOpenPositions, openPositions: openPositionCount(), momentumTrend: selectedRow.candidate.metrics?.momentum_trend },
+      });
+    }
+
     await handleApprovedBuy(selectedRow, batchDecision, batchId, rows, candidateId);
   } else {
     logDecisionEvent({

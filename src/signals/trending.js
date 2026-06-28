@@ -5,6 +5,7 @@ import { numSetting, boolSetting, setting } from '../db/settings.js';
 import { db } from '../db/connection.js';
 import { gmgnBackoffActive, setGmgnBackoff, gmgnFetch, normalizedTrendingRows } from '../enrichment/gmgn.js';
 import { normalizeJupiterTrendingRow } from '../enrichment/jupiter.js';
+import { updateMarketRegime } from './marketRegime.js';
 
 export const trending = new Map();
 let degenHandler = null;
@@ -103,6 +104,8 @@ export async function fetchGmgnTrending() {
       storeSignalEvent(mint, 'trending', token.source || source, token);
       if (degenHandler) await degenHandler(mint, token);
     }
+    // Update aggregate market health snapshot from all raw rows
+    updateMarketRegime(rows.filter(r => r?.address && String(r.address).endsWith('pump')));
     console.log(`[trending:${source}] loaded ${rows.length}, accepted ${tracked}, tracking ${trending.size}`);
   } catch (err) {
     if (source === 'gmgn') setGmgnBackoff('trending', err);

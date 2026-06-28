@@ -12,6 +12,28 @@ import { updateCandidateSnapshot } from '../db/candidates.js';
 import { trending } from '../signals/trending.js';
 import { executeLiveSell } from './router.js';
 import { sendPositionExit } from '../telegram/send.js';
+import { fetchOHLC } from '../enrichment/fetchOHLC.js';
+
+/**
+ * Calculate ATR as % of current price from OHLC candles.
+ */
+function calculateATRPercent(candles, currentPrice, period = 14) {
+  if (!candles || candles.length < period + 1 || !currentPrice || currentPrice <= 0) return null;
+  const trueRanges = [];
+  for (let i = 1; i < candles.length; i++) {
+    const high = Number(candles[i].high);
+    const low = Number(candles[i].low);
+    const prevClose = Number(candles[i - 1].close);
+    const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
+    trueRanges.push(tr);
+  }
+  if (trueRanges.length < period) return null;
+  let atr = trueRanges.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < trueRanges.length; i++) {
+    atr = (atr * (period - 1) + trueRanges[i]) / period;
+  }
+  return parseFloat((atr / currentPrice * 100).toFixed(2));
+}
 
 export async function freshEntryMarket(mint, candidate) {
   const gmgn = await fetchGmgnTokenInfo(mint, false);
@@ -131,10 +153,50 @@ export async function refreshPosition(position, { autoExit = true, jupiterPnl = 
   const strat = strategyById(position.strategy_id);
   const profitLockEnabled = Boolean(strat?.profit_lock_enabled);
   const tpHit = !profitLockEnabled && pnlPercent >= Number(position.tp_percent);
-  const slHit = pnlPercent <= Number(position.sl_percent);
+
+  // --- Dynamic Volatility Bounds (ATR-based SL & Trailing) ---
+  let atrPercent = null;
+  try {
+    const { default: axios } = await import('axios');
+    const url = new URL(`https://datapi.jup.ag/v2/charts/${position.mint}`);
+    url.searchParams.set('interval', '5_MINUTE');
+    url.searchParams.set('candles', '20');
+    url.searchParams.set('type', 'price');
+    url.searchParams.set('quote', 'native');
+    const res = await axios.get(url.toString(), { timeout: 8000, headers: { Accept: 'application/json' } });
+    const candles = Array.isArray(res.data?.candles) ? res.data.candles : [];
+    if (candles.length > 14 && Number(price) > 0) {
+      const trs = [];
+      for (let i = 1; i < candles.length; i++) {
+        const h = Number(candles[i].high);
+        const l = Number(candles[i].low);
+        const pc = Number(candles[i - 1].close);
+        trs.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
+      }
+      if (trs.length >= 14) {
+        let atr = trs.slice(0, 14).reduce((a, b) => a + b, 0) / 14;
+        for (let i = 14; i < trs.length; i++) atr = (atr * 13 + trs[i]) / 14;
+        atrPercent = parseFloat((atr / Number(price) * 100).toFixed(2));
+      }
+    }
+  } catch (_) { /* chart data unavailable, fall back to static bounds */ }
+
+  // Dynamic SL: wider of strategy SL or ATR x 2 (more volatile = wider stop)
+  const staticSL = Number(position.sl_percent);
+  const dynamicSL = atrPercent != null
+    ? Math.min(staticSL, -(Math.max(atrPercent * 2, 5)))
+    : staticSL;
+
+  // Dynamic trailing: wider of strategy trail or ATR x 1.5
+  const staticTrail = Number(position.trailing_percent);
+  const dynamicTrail = atrPercent != null
+    ? Math.max(staticTrail, Math.ceil(atrPercent * 1.5))
+    : staticTrail;
+
+  const slHit = pnlPercent <= dynamicSL;
   const trailingArmed = position.trailing_armed || (!profitLockEnabled && position.trailing_enabled && tpHit);
   const trailDrop = highWaterMcap > 0 ? (Number(mcap) / highWaterMcap - 1) * 100 : 0;
-  const trailingHit = !profitLockEnabled && trailingArmed && position.trailing_enabled && trailDrop <= -Math.abs(Number(position.trailing_percent));
+  const trailingHit = !profitLockEnabled && trailingArmed && position.trailing_enabled && trailDrop <= -Math.abs(dynamicTrail);
   let exitReason = null;
   let closed = false;
 
